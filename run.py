@@ -25,6 +25,7 @@ USERNAME = os.getenv("USERNAME")
 PASSWORD = os.getenv("PASSWORD")
 RTSP_PORT = int(os.getenv("RTSP_PORT")) # Convert to int if it's a number
 HTTP_PORT = int(os.getenv("HTTP_PORT"))
+BASE_URL = os.getenv("BASE_URL")
 
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
@@ -34,6 +35,8 @@ YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH")
 BIRD_CLASS_ID = int(os.getenv("BIRD_CLASS_ID"))
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD"))
 DETECTION_COOLDOWN_SECONDS = int(os.getenv("DETECTION_COOLDOWN_SECONDS"))
+
+IMAGE_DIR = os.getenv("IMAGE_DIR", "bird_images")
 
 # --- Global Variables for Token Management ---
 current_token = None
@@ -314,7 +317,7 @@ def main_loop():
 
         if motion_detected:
             current_time = time.time()
-            if (current_time - last_detection_time_bird) > DETECTION_COOLDEN_SECONDS:
+            if (current_time - last_detection_time_bird) > DETECTION_COOLDOWN_SECONDS:
                 print("Motion event triggering snapshot and bird detection...")
                 snapshot_data = capture_snapshot()
                 
