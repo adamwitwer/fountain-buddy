@@ -298,7 +298,7 @@ def main_loop():
     global last_detection_time_bird
     
     ai_capabilities = get_ai_capabilities()
-    supports_dog_cat_ai = ai_capabilities.get("supportAiDogCat", 0) == 1
+    supports_dog_cat_ai = ai_capabilities.get("supportAiAnimal", 0) == 1
     print(f"Camera supports Dog/Cat AI detection: {supports_dog_cat_ai}")
 
     while True:
