@@ -327,7 +327,8 @@ def main_loop():
                     frame = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
                     if frame is not None and yolo_model:
-                        results = yolo_model(frame, verbose=False)
+                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        results = yolo_model(frame_rgb, verbose=False)
                         birds_found = []
                         for r in results:
                             for box in r.boxes:
