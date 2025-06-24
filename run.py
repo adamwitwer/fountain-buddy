@@ -308,13 +308,11 @@ def main_loop():
             if ai_state and ai_state.get("dog_cat", {}).get("alarm_state") == 1:
                 print("AI Dog/Cat alarm detected!")
                 motion_detected = True
-        
-        if not motion_detected: # If AI didn't detect, check general MD
+        else:
             md_state = get_md_state()
             if md_state == 1:
                 print("General Motion Detected!")
                 motion_detected = True
-
         if motion_detected:
             current_time = time.time()
             if (current_time - last_detection_time_bird) > DETECTION_COOLDOWN_SECONDS:
