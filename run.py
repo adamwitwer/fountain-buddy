@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# --- Load environment variables ---
+load_dotenv()
+
 import requests
 import json
 import time
@@ -7,17 +12,13 @@ import sqlite3
 import smtplib
 import random
 import string
-import numpy as np # Often used with cv2 for image manipulation
+import numpy as np
 import cv2
-from dotenv import load_dotenv
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from apscheduler.schedulers.background import BackgroundScheduler
 from ultralytics import YOLO
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Access your variables using os.getenv()
 CAMERA_IP = os.getenv("CAMERA_IP")
