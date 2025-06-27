@@ -443,14 +443,21 @@ def main_loop():
                                     print(f"YOLO found: {animal_name} with confidence {conf:.2f}")
 
                         if detections:
-                            # To avoid multiple triggers for the same event,
-                            # record the detection with the highest confidence.
-                            best_detection = max(detections, key=lambda x: x['confidence'])
+                            # Prioritize birds. First, check if any birds were detected.
+                            bird_detections = [d for d in detections if d['name'] == 'bird']
+                            
+                            if bird_detections:
+                                # If birds are present, record the one with the highest confidence
+                                best_detection = max(bird_detections, key=lambda x: x['confidence'])
+                                print(f"Bird detected! Recording visit for 'bird'.")
+                            else:
+                                # If no birds, record the highest confidence non-bird animal
+                                best_detection = max(detections, key=lambda x: x['confidence'])
+                                print(f"Non-bird animal detected: {best_detection['name']}. Recording visit.")
+
                             animal_to_record = best_detection['name']
                             
-                            print(f"Highest confidence detection: {animal_to_record}. Recording visit.")
-                            
-                            # Draw box for the best detection on the saved frame for debugging
+                            # Draw box for the recorded detection on the saved frame
                             x1, y1, x2, y2 = map(int, best_detection['box'])
                             label = f"{animal_to_record} {best_detection['confidence']:.2f}"
                             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
