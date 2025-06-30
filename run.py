@@ -16,7 +16,8 @@ from email.mime.image import MIMEImage
 from apscheduler.schedulers.background import BackgroundScheduler
 from ultralytics import YOLO # Assuming YOLO is used as discussed
 import tensorflow as tf
-import tensorflow_hub as hub
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 from PIL import Image
 
 # Load environment variables from .env file
@@ -310,8 +311,9 @@ except Exception as e:
 # Load bird species classification model
 bird_classifier = None
 try:
-    # Using iNaturalist bird classification model from TensorFlow Hub
-    bird_classifier = hub.load("https://tfhub.dev/google/aiy/vision/classifier/birds_V1/1")
+    # Using ResNet50 pre-trained on ImageNet (includes many bird species)
+    print("Loading bird species classifier...")
+    bird_classifier = ResNet50(weights='imagenet')
     print("Bird species classifier loaded successfully")
 except Exception as e:
     print(f"Error loading bird species classifier: {e}. Species identification will be disabled.")
@@ -329,51 +331,66 @@ def classify_bird_species(image_crop):
         return None, 0
     
     try:
-        # Resize image to 224x224 as expected by the model
+        # Resize image to 224x224 as expected by ResNet50
         pil_image = Image.fromarray(cv2.cvtColor(image_crop, cv2.COLOR_BGR2RGB))
         pil_image = pil_image.resize((224, 224))
         
-        # Convert to tensor and normalize
-        image_tensor = tf.convert_to_tensor(np.array(pil_image), dtype=tf.float32)
-        image_tensor = tf.expand_dims(image_tensor, 0)  # Add batch dimension
-        image_tensor = image_tensor / 255.0  # Normalize to [0, 1]
+        # Convert to numpy array and preprocess for ResNet50
+        img_array = np.array(pil_image)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = preprocess_input(img_array)
         
         # Run inference
-        predictions = bird_classifier(image_tensor)
+        predictions = bird_classifier.predict(img_array, verbose=0)
         
-        # Get top prediction
-        predicted_class = tf.argmax(predictions, axis=1)[0].numpy()
-        confidence = tf.reduce_max(predictions).numpy()
+        # Decode predictions to get readable labels
+        decoded_predictions = decode_predictions(predictions, top=3)[0]
         
-        # Load bird species labels (these are the 965 bird species from iNaturalist)
-        species_name = get_bird_species_name(predicted_class)
+        # Look for bird-related classifications
+        for i, (imagenet_id, label, confidence) in enumerate(decoded_predictions):
+            # Check if this is a bird species (ImageNet has many bird classes)
+            if is_bird_species(label):
+                species_name = format_species_name(label)
+                return species_name, float(confidence)
         
+        # If no bird species found in top 3, return the top prediction anyway
+        _, label, confidence = decoded_predictions[0]
+        species_name = format_species_name(label)
         return species_name, float(confidence)
         
     except Exception as e:
         print(f"Error in bird species classification: {e}")
         return None, 0
 
-def get_bird_species_name(class_id):
+def is_bird_species(label):
     """
-    Convert class ID to bird species name.
-    This is a simplified version - in production you'd load the full label mapping.
+    Check if the ImageNet label represents a bird species.
     """
-    # Common backyard birds mapping (simplified for demo)
-    common_birds = {
-        0: "American Robin",
-        1: "Blue Jay", 
-        2: "Northern Cardinal",
-        3: "House Sparrow",
-        4: "American Goldfinch",
-        5: "Mourning Dove",
-        6: "Red-winged Blackbird",
-        7: "House Finch",
-        8: "European Starling",
-        9: "American Crow"
-    }
+    bird_keywords = [
+        'robin', 'jay', 'cardinal', 'sparrow', 'finch', 'dove', 'pigeon',
+        'crow', 'raven', 'hawk', 'eagle', 'owl', 'woodpecker', 'wren',
+        'chickadee', 'nuthatch', 'warbler', 'thrush', 'flycatcher',
+        'vireo', 'tanager', 'bunting', 'oriole', 'blackbird', 'grackle',
+        'starling', 'swallow', 'martin', 'swift', 'hummingbird', 'kingfisher',
+        'flicker', 'sapsucker', 'kingbird', 'phoebe', 'pewee', 'martin',
+        'goldfinch', 'siskin', 'canary', 'redstart', 'chat', 'mockingbird',
+        'catbird', 'thrasher', 'shrike', 'magpie', 'tit', 'chickadee'
+    ]
     
-    return common_birds.get(class_id, f"Unknown Bird Species (ID: {class_id})")
+    label_lower = label.lower()
+    return any(keyword in label_lower for keyword in bird_keywords)
+
+def format_species_name(label):
+    """
+    Format the ImageNet label into a readable species name.
+    """
+    # Remove underscores and capitalize words
+    formatted = label.replace('_', ' ').title()
+    
+    # Remove common ImageNet artifacts
+    formatted = formatted.replace(',', ' -')
+    
+    return formatted
 
 def main_loop():
     global last_detection_time_bird
