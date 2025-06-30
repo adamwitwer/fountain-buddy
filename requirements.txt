@@ -4,3 +4,6 @@ numpy
 ultralytics
 python-dotenv
 apscheduler
+tensorflow
+tensorflow-hub
+pillow
