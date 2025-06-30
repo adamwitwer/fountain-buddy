@@ -15,6 +15,9 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from apscheduler.schedulers.background import BackgroundScheduler
 from ultralytics import YOLO # Assuming YOLO is used as discussed
+import tensorflow as tf
+import tensorflow_hub as hub
+from PIL import Image
 
 # Load environment variables from .env file
 load_dotenv()
@@ -52,16 +55,25 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT NOT NULL,
             bird_type TEXT NOT NULL,
+            species TEXT,
+            confidence REAL,
             image_path TEXT
         )
     """)
     conn.commit()
     conn.close()
 
-def record_bird_visit(bird_type, frame):
+def record_bird_visit(bird_type, frame, species=None, species_confidence=None):
     os.makedirs(IMAGE_DIR, exist_ok=True)
     timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    image_filename = f"bird_{timestamp_str}.jpg"
+    
+    # Include species in filename if available
+    if species and species != "Unknown Bird Species":
+        species_clean = species.replace(" ", "_").replace("(", "").replace(")", "")
+        image_filename = f"bird_{species_clean}_{timestamp_str}.jpg"
+    else:
+        image_filename = f"bird_{timestamp_str}.jpg"
+    
     image_path = os.path.join(IMAGE_DIR, image_filename)
 
     # Save the image
@@ -69,11 +81,13 @@ def record_bird_visit(bird_type, frame):
 
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO bird_visits (timestamp, bird_type, image_path) VALUES (?, ?, ?)",
-                   (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), bird_type, image_path))
+    cursor.execute("INSERT INTO bird_visits (timestamp, bird_type, species, confidence, image_path) VALUES (?, ?, ?, ?, ?)",
+                   (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), bird_type, species, species_confidence, image_path))
     conn.commit()
     conn.close()
-    print(f"Recorded bird visit: {bird_type} at {timestamp_str}")
+    
+    species_info = f" ({species}, {species_confidence:.2f})" if species else ""
+    print(f"Recorded bird visit: {bird_type}{species_info} at {timestamp_str}")
     return image_path
 
 # --- Reolink API Interaction Functions ---
@@ -224,7 +238,7 @@ def generate_daily_summary():
     }
 
     cursor.execute("""
-        SELECT timestamp, bird_type, image_path
+        SELECT timestamp, bird_type, species, confidence, image_path
         FROM bird_visits
         WHERE timestamp BETWEEN ? AND ?
         ORDER BY timestamp DESC
@@ -236,8 +250,10 @@ def generate_daily_summary():
     summary_data["total_visits"] = len(visits)
 
     for visit in visits:
-        timestamp, bird_type, image_path = visit
-        summary_data["bird_counts"][bird_type] = summary_data["bird_counts"].get(bird_type, 0) + 1
+        timestamp, bird_type, species, confidence, image_path = visit
+        # Use species if available, otherwise fall back to bird_type
+        display_name = species if species else bird_type
+        summary_data["bird_counts"][display_name] = summary_data["bird_counts"].get(display_name, 0) + 1
 
         if len(summary_data["sample_images"]) < 3 and image_path and os.path.exists(image_path):
             if image_path not in summary_data["sample_images"]:
@@ -245,12 +261,12 @@ def generate_daily_summary():
 
     summary_message = f"Daily Bird Fountain Summary for {end_time.strftime('%Y-%m-%d')}:\n\n"
     summary_message += f"Total bird visits: {summary_data['total_visits']}\n\n"
-    summary_message += "Bird Type Counts:\n"
+    summary_message += "Bird Species Counts:\n"
     if summary_data["bird_counts"]:
-        for bird_type, count in summary_data["bird_counts"].items():
-            summary_message += f"- {bird_type}: {count}\n"
+        for species_name, count in summary_data["bird_counts"].items():
+            summary_message += f"- {species_name}: {count}\n"
     else:
-        summary_message += "No specific bird types identified today.\n"
+        summary_message += "No specific bird species identified today.\n"
 
     return summary_message, summary_data["sample_images"]
 
@@ -291,8 +307,73 @@ except Exception as e:
     print(f"Error loading YOLOv8 model: {e}. Please ensure the model file exists and is correct.")
     yolo_model = None # Set to None if loading fails
 
+# Load bird species classification model
+bird_classifier = None
+try:
+    # Using iNaturalist bird classification model from TensorFlow Hub
+    bird_classifier = hub.load("https://tfhub.dev/google/aiy/vision/classifier/birds_V1/1")
+    print("Bird species classifier loaded successfully")
+except Exception as e:
+    print(f"Error loading bird species classifier: {e}. Species identification will be disabled.")
+    bird_classifier = None
+
 # Keep track of last detection times for cooldown
 last_detection_time_bird = 0
+
+def classify_bird_species(image_crop):
+    """
+    Classify bird species from a cropped image containing a bird.
+    Returns (species_name, confidence) or (None, 0) if classification fails.
+    """
+    if bird_classifier is None:
+        return None, 0
+    
+    try:
+        # Resize image to 224x224 as expected by the model
+        pil_image = Image.fromarray(cv2.cvtColor(image_crop, cv2.COLOR_BGR2RGB))
+        pil_image = pil_image.resize((224, 224))
+        
+        # Convert to tensor and normalize
+        image_tensor = tf.convert_to_tensor(np.array(pil_image), dtype=tf.float32)
+        image_tensor = tf.expand_dims(image_tensor, 0)  # Add batch dimension
+        image_tensor = image_tensor / 255.0  # Normalize to [0, 1]
+        
+        # Run inference
+        predictions = bird_classifier(image_tensor)
+        
+        # Get top prediction
+        predicted_class = tf.argmax(predictions, axis=1)[0].numpy()
+        confidence = tf.reduce_max(predictions).numpy()
+        
+        # Load bird species labels (these are the 965 bird species from iNaturalist)
+        species_name = get_bird_species_name(predicted_class)
+        
+        return species_name, float(confidence)
+        
+    except Exception as e:
+        print(f"Error in bird species classification: {e}")
+        return None, 0
+
+def get_bird_species_name(class_id):
+    """
+    Convert class ID to bird species name.
+    This is a simplified version - in production you'd load the full label mapping.
+    """
+    # Common backyard birds mapping (simplified for demo)
+    common_birds = {
+        0: "American Robin",
+        1: "Blue Jay", 
+        2: "Northern Cardinal",
+        3: "House Sparrow",
+        4: "American Goldfinch",
+        5: "Mourning Dove",
+        6: "Red-winged Blackbird",
+        7: "House Finch",
+        8: "European Starling",
+        9: "American Crow"
+    }
+    
+    return common_birds.get(class_id, f"Unknown Bird Species (ID: {class_id})")
 
 def main_loop():
     global last_detection_time_bird
@@ -328,21 +409,42 @@ def main_loop():
                         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         results = yolo_model(frame_rgb, verbose=False)
                         birds_found = []
+                        bird_crops = []
                         for r in results:
                             for box in r.boxes:
                                 conf = box.conf[0].item()
                                 cls = int(box.cls[0].item())
                                 # Assuming COCO dataset where 'bird' is class 14
                                 if conf > CONFIDENCE_THRESHOLD and cls == BIRD_CLASS_ID:
-                                    # Optional: Draw bounding box for debugging if displaying frame
+                                    # Get bounding box coordinates
                                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                                    
+                                    # Extract bird crop for species classification
+                                    bird_crop = frame[y1:y2, x1:x2]
+                                    bird_crops.append(bird_crop)
+                                    
+                                    # Optional: Draw bounding box for debugging if displaying frame
                                     cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                                     cv2.putText(frame, f"Bird {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                                    birds_found.append({"label": "bird", "confidence": conf}) # We can generalize this to "bird"
+                                    birds_found.append({"label": "bird", "confidence": conf})
 
                         if birds_found:
                             print(f"Actual bird detected by YOLO! Found {len(birds_found)} instances.")
-                            record_bird_visit("bird", frame) # Record with generic "bird" type
+                            
+                            # Classify species for the first (largest) bird detection
+                            species_name = None
+                            species_confidence = None
+                            if bird_crops and bird_classifier:
+                                try:
+                                    # Use the largest bird crop for species classification
+                                    largest_crop = max(bird_crops, key=lambda crop: crop.shape[0] * crop.shape[1])
+                                    species_name, species_confidence = classify_bird_species(largest_crop)
+                                    if species_name:
+                                        print(f"Species identified: {species_name} (confidence: {species_confidence:.2f})")
+                                except Exception as e:
+                                    print(f"Error during species classification: {e}")
+                            
+                            record_bird_visit("bird", frame, species_name, species_confidence)
                             last_detection_time_bird = current_time
                         else:
                             print("No birds identified by YOLO, but motion/AI detected.")
