@@ -42,6 +42,11 @@ DETECTION_COOLDOWN_SECONDS = int(os.getenv("DETECTION_COOLDOWN_SECONDS"))
 
 IMAGE_DIR = os.getenv("IMAGE_DIR", "bird_images")
 
+# Discord webhook URLs for bird identification
+DISCORD_WEBHOOK_TEST = os.getenv("DISCORD_WEBHOOK_TEST")
+DISCORD_WEBHOOK_PROD = os.getenv("DISCORD_WEBHOOK_PROD")
+USE_DISCORD = os.getenv("USE_DISCORD", "false").lower() == "true"
+
 # --- Global Variables for Token Management ---
 current_token = None
 token_expiry_time = 0
@@ -90,6 +95,72 @@ def record_bird_visit(bird_type, frame, species=None, species_confidence=None):
     species_info = f" ({species}, {species_confidence:.2f})" if species else ""
     print(f"Recorded bird visit: {bird_type}{species_info} at {timestamp_str}")
     return image_path
+
+# --- Discord Bird Identification Functions ---
+
+# Common bird species in order of frequency (based on your local area)
+COMMON_BIRDS = {
+    1: "Northern Cardinal",
+    2: "American Robin", 
+    3: "Common Grackle",
+    4: "Blue Jay",
+    5: "Mourning Dove",
+    6: "House Sparrow",
+    7: "American Goldfinch",
+    8: "Red-winged Blackbird",
+    9: "House Finch",
+    10: "Gray Catbird"
+}
+
+def send_bird_to_discord(image_path, yolo_confidence, ai_species=None, ai_confidence=None):
+    """Send bird image to Discord for human identification."""
+    
+    if not USE_DISCORD:
+        return
+    
+    webhook_url = DISCORD_WEBHOOK_PROD  # Use production webhook
+    if not webhook_url:
+        print("❌ Discord webhook not configured")
+        return
+    
+    try:
+        # Create the message with numbered options
+        message_lines = [
+            f"🐦 **New bird detected!** YOLO confidence: {yolo_confidence:.2f}",
+        ]
+        
+        if ai_species and ai_confidence:
+            message_lines.append(f"🤖 AI thinks: {ai_species} ({ai_confidence:.2f})")
+        
+        message_lines.extend([
+            "",
+            "**What species is this? Reply with number:**",
+        ])
+        
+        # Add numbered common birds
+        for num, species in COMMON_BIRDS.items():
+            message_lines.append(f"{num}. {species}")
+        
+        message_lines.extend([
+            "",
+            "**Or reply with the species name for others**",
+            f"📁 File: `{os.path.basename(image_path)}`"
+        ])
+        
+        message_content = "\n".join(message_lines)
+        
+        # Send the image with message
+        with open(image_path, 'rb') as f:
+            files = {'file': (os.path.basename(image_path), f, 'image/jpeg')}
+            data = {'content': message_content}
+            
+            response = requests.post(webhook_url, data=data, files=files, timeout=10)
+            response.raise_for_status()
+            
+        print(f"✅ Bird image sent to Discord: {os.path.basename(image_path)}")
+        
+    except Exception as e:
+        print(f"❌ Failed to send to Discord: {e}")
 
 # --- Reolink API Interaction Functions ---
 
@@ -461,7 +532,14 @@ def main_loop():
                                 except Exception as e:
                                     print(f"Error during species classification: {e}")
                             
-                            record_bird_visit("bird", frame, species_name, species_confidence)
+                            image_path = record_bird_visit("bird", frame, species_name, species_confidence)
+                            
+                            # Send to Discord for human identification
+                            if USE_DISCORD:
+                                # Get the highest YOLO confidence from detections
+                                max_yolo_confidence = max(bird['confidence'] for bird in birds_found)
+                                send_bird_to_discord(image_path, max_yolo_confidence, species_name, species_confidence)
+                            
                             last_detection_time_bird = current_time
                         else:
                             print("No birds identified by YOLO, but motion/AI detected.")
