@@ -45,6 +45,8 @@ IMAGE_DIR = os.getenv("IMAGE_DIR", "bird_images")
 # Discord webhook URLs for bird identification
 DISCORD_WEBHOOK_TEST = os.getenv("DISCORD_WEBHOOK_TEST")
 DISCORD_WEBHOOK_PROD = os.getenv("DISCORD_WEBHOOK_PROD")
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")  # Channel ID for production
 USE_DISCORD = os.getenv("USE_DISCORD", "false").lower() == "true"
 
 # --- Global Variables for Token Management ---
@@ -161,6 +163,108 @@ def send_bird_to_discord(image_path, yolo_confidence, ai_species=None, ai_confid
         
     except Exception as e:
         print(f"❌ Failed to send to Discord: {e}")
+
+def update_bird_species_from_human(filename, human_species, human_confidence=1.0):
+    """Update bird species in database based on human identification."""
+    
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        
+        # Find the record by image filename
+        cursor.execute("""
+            SELECT id, image_path, species FROM bird_visits 
+            WHERE image_path LIKE ?
+            ORDER BY timestamp DESC LIMIT 1
+        """, (f"%{filename}%",))
+        
+        result = cursor.fetchone()
+        if not result:
+            print(f"❌ No database record found for {filename}")
+            return False
+        
+        record_id, old_image_path, old_species = result
+        
+        # Update the species and confidence in database
+        cursor.execute("""
+            UPDATE bird_visits 
+            SET species = ?, confidence = ? 
+            WHERE id = ?
+        """, (human_species, human_confidence, record_id))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Updated database: {filename} → {human_species}")
+        
+        # Rename the image file to include correct species
+        if old_image_path and os.path.exists(old_image_path):
+            new_filename = rename_image_with_species(old_image_path, human_species)
+            if new_filename:
+                # Update database with new filename
+                conn = sqlite3.connect(DB_NAME)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE bird_visits SET image_path = ? WHERE id = ?", 
+                             (new_filename, record_id))
+                conn.commit()
+                conn.close()
+                print(f"✅ Renamed image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error updating species: {e}")
+        return False
+
+def rename_image_with_species(old_path, species_name):
+    """Rename image file to include the correct species name."""
+    
+    try:
+        # Extract timestamp from old filename
+        old_filename = os.path.basename(old_path)
+        
+        # Look for timestamp pattern (YYYY-MM-DD_HH-MM-SS)
+        import re
+        timestamp_match = re.search(r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}', old_filename)
+        
+        if timestamp_match:
+            timestamp = timestamp_match.group(0)
+            
+            # Create new filename with species
+            species_clean = species_name.replace(" ", "_").replace("(", "").replace(")", "")
+            new_filename = f"bird_{species_clean}_{timestamp}.jpg"
+            new_path = os.path.join(os.path.dirname(old_path), new_filename)
+            
+            # Rename the file
+            os.rename(old_path, new_path)
+            return new_path
+        else:
+            print(f"⚠️ Could not extract timestamp from {old_filename}")
+            return old_path
+            
+    except Exception as e:
+        print(f"❌ Error renaming image: {e}")
+        return old_path
+
+def parse_human_response(message_content):
+    """Parse human response to extract species identification."""
+    
+    content = message_content.strip()
+    
+    # Check if it's a numbered response
+    if content.isdigit():
+        number = int(content)
+        if number in COMMON_BIRDS:
+            return COMMON_BIRDS[number]
+        else:
+            return None  # Invalid number
+    
+    # Check if it's a direct species name
+    # Clean up the input and capitalize properly
+    if len(content) > 1:
+        return content.title()
+    
+    return None
 
 # --- Reolink API Interaction Functions ---
 
