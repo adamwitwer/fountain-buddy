@@ -117,26 +117,6 @@ DISCORD_CHANNEL_ID=your_channel_id
    - Generate OAuth2 URL with "Send Messages" and "Read Message History" permissions
    - Invite bot to your server
 
-## 🏃‍♂️ Running
-
-### Development Mode
-```bash
-# Run main application
-python3 run.py
-
-# Run Discord bot (in separate terminal)
-python3 discord_bot.py
-```
-
-### Production Mode
-```bash
-# Set up as systemd services
-sudo cp fountain-buddy.service /etc/systemd/system/
-sudo cp discord-bot.service /etc/systemd/system/
-sudo systemctl enable fountain-buddy discord-bot
-sudo systemctl start fountain-buddy discord-bot
-```
-
 ## 📱 Usage
 
 ### Bird Identification Workflow
@@ -230,24 +210,6 @@ The modular design makes it easy to extend:
 - **Enhanced AI models** - Integrate new species classifiers
 - **Data analysis** - Query SQLite database for insights
 
-### Testing
-
-```bash
-# Test Discord bot functionality
-python3 discord_bot.py test
-
-# Run with debug output
-python3 run.py --debug
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -259,12 +221,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Discord.py** - Discord bot framework
 - **TensorFlow** - AI/ML framework
 - **Reolink** - Camera integration
-
-## 📞 Support
-
-For questions, issues, or feature requests:
-- Open an [issue](https://github.com/yourusername/fountain-buddy/issues)
-- Join our [Discord community](https://discord.gg/your-server)
 
 ---
 
