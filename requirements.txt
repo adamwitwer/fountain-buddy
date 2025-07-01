@@ -7,3 +7,4 @@ apscheduler
 tensorflow
 tensorflow-hub
 pillow
+discord.py
