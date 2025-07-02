@@ -55,12 +55,27 @@ async def on_message(message):
     
     print(f"📝 Human identification received: '{message.content}' → {species_name}")
     
-    # Find the most recent bird detection that needs identification
-    # Look for recent messages from webhook (bot messages) containing file names
-    recent_filename = await find_recent_bird_filename(message.channel)
+    # Find the bird filename associated with this conversation
+    # If replying to a message, get filename from that specific message
+    # Otherwise, find the most recent bird detection
+    target_filename = None
     
-    if recent_filename:
-        success = update_bird_species_from_human(recent_filename, species_name)
+    if message.reference and message.reference.message_id:
+        # User is replying to a specific message - find filename from that message
+        try:
+            referenced_msg = await message.channel.fetch_message(message.reference.message_id)
+            target_filename = extract_filename_from_message(referenced_msg)
+            print(f"🎯 Reply detected - using filename from referenced message: {target_filename}")
+        except:
+            print("⚠️ Could not fetch referenced message")
+    
+    if not target_filename:
+        # Fallback: find most recent bird detection
+        target_filename = await find_recent_bird_filename(message.channel)
+        print(f"🔍 Using most recent bird filename: {target_filename}")
+    
+    if target_filename:
+        success = update_bird_species_from_human(target_filename, species_name)
         
         if success:
             # Send confirmation in Discord
@@ -80,6 +95,28 @@ async def on_message(message):
         await message.add_reaction("❓")
         await message.reply("❓ Couldn't find a recent bird image to identify. Please make sure you're responding to a recent detection.", mention_author=False)
         print("❓ No recent bird filename found for identification")
+
+def extract_filename_from_message(message):
+    """Extract filename from a Discord message."""
+    
+    try:
+        # Look for filename in message content
+        if "📁 File:" in message.content:
+            filename_match = re.search(r'📁 File: `([^`]+)`', message.content)
+            if filename_match:
+                return filename_match.group(1)
+        
+        # Also check attachments as backup
+        if message.attachments:
+            for attachment in message.attachments:
+                if attachment.filename.startswith('bird_') and attachment.filename.endswith('.jpg'):
+                    return attachment.filename
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ Error extracting filename from message: {e}")
+        return None
 
 async def find_recent_bird_filename(channel):
     """Find the filename from the most recent bird detection message."""
