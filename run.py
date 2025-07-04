@@ -19,6 +19,8 @@ import tensorflow as tf
 from tensorflow.keras.applications import ResNet50
 from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
 from PIL import Image
+from custom_bird_classifier import CustomBirdClassifier
+from auto_retrain import AutoRetrainer
 
 # Load environment variables from .env file
 load_dotenv()
@@ -446,6 +448,21 @@ def generate_daily_summary():
 
     return summary_message, summary_data["sample_images"]
 
+def check_for_model_updates():
+    """Check if model needs retraining"""
+    try:
+        retrainer = AutoRetrainer(min_new_samples=15)
+        if retrainer.check_and_retrain():
+            # Reload the custom classifier with new model
+            print("Model retrained successfully, reloading custom classifier...")
+            custom_classifier.load_model()
+            print("Custom classifier reloaded with updated model")
+            return True
+        return False
+    except Exception as e:
+        print(f"Error checking for model updates: {e}")
+        return False
+
 def send_email_summary(summary_text, image_paths, recipient_email, sender_email, sender_password):
     msg = MIMEMultipart()
     msg['From'] = sender_email
@@ -494,12 +511,16 @@ except Exception as e:
     print(f"Error loading bird species classifier: {e}. Species identification will be disabled.")
     bird_classifier = None
 
+# Initialize custom bird classifier
+custom_classifier = CustomBirdClassifier()
+custom_classifier.load_model()
+
 # Keep track of last detection times for cooldown
 last_detection_time_bird = 0
 
-def classify_bird_species(image_crop):
+def original_classify_bird_species(image_crop):
     """
-    Classify bird species from a cropped image containing a bird.
+    Original ImageNet-based bird species classification (fallback).
     Returns (species_name, confidence) or (None, 0) if classification fails.
     """
     if bird_classifier is None:
@@ -536,6 +557,20 @@ def classify_bird_species(image_crop):
     except Exception as e:
         print(f"Error in bird species classification: {e}")
         return None, 0
+
+def classify_bird_species(image_crop):
+    """Classify bird species using custom model with fallback"""
+    try:
+        if custom_classifier.is_loaded:
+            result = custom_classifier.predict(image_crop)
+            print(f"Custom classifier: {result['species']} ({result['confidence']:.2f})")
+            if result['confidence'] > 0.3:  # High confidence threshold
+                return result['species'], result['confidence']
+    except Exception as e:
+        print(f"Custom classifier error: {e}")
+    
+    # Fall back to original ImageNet classifier
+    return original_classify_bird_species(image_crop)
 
 def is_bird_species(label):
     """
@@ -659,11 +694,17 @@ def main_loop():
 if __name__ == "__main__":
     init_db()
 
-    # Schedule the daily summary email
+    # Schedule the daily summary email and model update check
     scheduler = BackgroundScheduler()
+    
     # Runs at 11:00 PM every day
-    scheduler.add_job(lambda: send_email_summary(*generate_daily_summary(), RECIPIENT_EMAIL, SENDER_EMAIL, SENDER_PASSWORD),
-                      'cron', hour=23, minute=0)
+    def daily_tasks():
+        # Check for model updates first
+        check_for_model_updates()
+        # Then send daily summary
+        send_email_summary(*generate_daily_summary(), RECIPIENT_EMAIL, SENDER_EMAIL, SENDER_PASSWORD)
+    
+    scheduler.add_job(daily_tasks, 'cron', hour=23, minute=0)
     scheduler.start()
 
     print("Bird monitoring application started. Press Ctrl+C to exit.")

@@ -1,0 +1,13 @@
+{
+  "class_names": [
+    "Catbird",
+    "Gray Catbird",
+    "House Sparrow",
+    "Mourning Dove",
+    "Northern Cardinal",
+    "Starling"
+  ],
+  "num_classes": 6,
+  "trained_on": "2025-07-04T11:09:25.303177",
+  "training_samples": 6
+}
