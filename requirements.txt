@@ -8,3 +8,4 @@ tensorflow
 tensorflow-hub
 pillow
 discord.py
+scikit-learn

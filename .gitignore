@@ -179,6 +179,9 @@ bird_images/
 *.jpg
 *.png
 *.pt
+*.h5
 yolov8*.pt
 discord_bot.log
 nohup.out
+training_data/
+models/
