@@ -23,13 +23,22 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 - **Daily email summaries** - Beautiful reports with accurate species counts
 - **Confidence tracking** - AI vs human identification comparison
 
+### 🧠 Self-Training AI System
+- **Continuous learning** - AI model improves from your corrections
+- **Automated retraining** - Triggers when 15+ new identifications collected
+- **Custom classifier** - Specialized for your backyard bird species
+- **Transfer learning** - Fine-tuned ResNet-50 model for optimal accuracy
+- **Quality control** - Uses only human-verified data for training
+
 ### 🔄 Complete Workflow
 1. **Bird visits fountain** → Motion/AI detection triggers
 2. **YOLO identifies bird** → Crops bird region from image
-3. **Discord notification** → Image + numbered species options sent
-4. **Human verification** → Reply "3" for Blue Jay or type species name
-5. **Automatic updates** → Database and filename updated with correct species
-6. **Daily reporting** → Email summary with accurate species data
+3. **AI species classification** → Custom model predicts species
+4. **Discord notification** → Image + AI prediction + numbered species options sent
+5. **Human verification** → Reply "3" for Blue Jay or type species name
+6. **Automatic updates** → Database and filename updated with correct species
+7. **Self-training** → AI model automatically retrains on your corrections
+8. **Daily reporting** → Email summary with accurate species data
 
 ## 🚀 Installation
 
@@ -139,6 +148,7 @@ DISCORD_CHANNEL_ID=your_channel_id
      5. Mourning Dove
      ...
      ```
+   - AI prediction uses your custom-trained model for better accuracy
 
 3. **Quick Response**
    - Reply with number: `4`
@@ -148,6 +158,7 @@ DISCORD_CHANNEL_ID=your_channel_id
 4. **Automatic Updates**
    - Database updated with your identification
    - Image renamed: `bird_Blue_Jay_2025-07-01_14-30-15.jpg`
+   - Training data collected for AI model improvement
    - Perfect accuracy for daily reports
 
 ### Daily Reports
@@ -157,22 +168,35 @@ Receive email summaries at 11 PM with:
 - Species breakdown (your accurate data!)
 - Sample images from the day
 
+### AI Model Training
+
+The system continuously learns from your corrections:
+- **Automatic retraining** triggers when 15+ new identifications are collected
+- **Custom classifier** specialized for your specific bird species
+- **Quality control** ensures only human-verified data is used
+- **Training logs** track model improvements over time
+- **Fallback system** uses original classifier for low-confidence predictions
+
 ## 🏗️ Architecture
 
 ### Core Components
 
 - **`run.py`** - Main application with camera monitoring and bird detection
 - **`discord_bot.py`** - Bot for processing human identification responses
+- **`bird_trainer.py`** - AI model training system with transfer learning
+- **`auto_retrain.py`** - Automated retraining trigger system
 - **`requirements.txt`** - Python dependencies
 - **`.env.example`** - Configuration template
 
 ### Data Flow
 
 ```
-Camera → Motion Detection → YOLO → Species Crop → Discord Notification
-                                                          ↓
+Camera → Motion Detection → YOLO → Custom AI Classifier → Discord Notification
+                                                                    ↓
 Database ← File Rename ← Human Response ← Discord Bot ← Human Reply
-                                                          ↓
+    ↓                                                              ↓
+Training Data → Auto Retrain → Updated Model → Better Predictions
+    ↓
 Daily Email ← Species Summary ← Database Query ← Scheduled Task
 ```
 
@@ -196,9 +220,15 @@ CREATE TABLE bird_visits (
 fountain-buddy/
 ├── run.py                 # Main application
 ├── discord_bot.py         # Discord bot for human feedback
+├── bird_trainer.py        # AI model training system
+├── auto_retrain.py        # Automated retraining trigger
 ├── requirements.txt       # Dependencies
 ├── .env.example          # Configuration template
 ├── .gitignore           # Git ignore rules
+├── training_log.json     # Training session logs
+├── models/               # Trained AI models
+├── training_data/        # Organized training images
+├── bird_images/          # All captured bird images
 └── README.md            # This file
 ```
 
@@ -207,8 +237,9 @@ fountain-buddy/
 The modular design makes it easy to extend:
 - **New detection methods** - Add to YOLO processing pipeline
 - **Additional notifications** - Extend Discord webhook system
-- **Enhanced AI models** - Integrate new species classifiers
+- **Enhanced AI models** - Modify training pipeline in `bird_trainer.py`
 - **Data analysis** - Query SQLite database for insights
+- **Multi-camera support** - Scale training data across multiple locations
 
 ## 📄 License
 
