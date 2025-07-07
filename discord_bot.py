@@ -60,6 +60,7 @@ async def on_message(message):
     # Otherwise, find the most recent bird detection
     target_filename = None
     
+    referenced_msg = None
     if message.reference and message.reference.message_id:
         # User is replying to a specific message - find filename from that message
         try:
@@ -86,6 +87,15 @@ async def on_message(message):
             
             await message.add_reaction("✅")
             await message.reply(response, mention_author=False)
+            
+            # Add green checkmark to the original bird detection message if this was a reply
+            if referenced_msg:
+                try:
+                    await referenced_msg.add_reaction("✅")
+                    print(f"✅ Added checkmark to original message")
+                except Exception as e:
+                    print(f"⚠️ Could not add reaction to referenced message: {e}")
+            
             print(f"✅ Successfully processed identification: {species_name}")
         else:
             await message.add_reaction("❌")
