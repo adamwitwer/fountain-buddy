@@ -106,7 +106,7 @@ class AutoRetrainer:
             
             # Run the training script
             result = subprocess.run(
-                ['python3', 'bird_trainer.py'],
+                ['./venv/bin/python', 'bird_trainer.py'],
                 capture_output=True,
                 text=True,
                 timeout=3600  # 1 hour timeout

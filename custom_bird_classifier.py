@@ -165,7 +165,7 @@ def integrate_with_main_app():
            
            if new_corrections >= 20:  # Retrain every 20 new corrections
                print("Triggering model retraining...")
-               os.system("python3 bird_trainer.py")
+               os.system("./venv/bin/python bird_trainer.py")
     
     5. Add retraining check to your daily summary or main loop
     """
