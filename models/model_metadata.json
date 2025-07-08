@@ -4,18 +4,16 @@
     "Blue Jay",
     "Catbird",
     "Common Grackle",
+    "European Starling",
     "Gray Catbird",
     "House Finch",
     "House Sparrow",
     "Mourning Dove",
     "Northern Cardinal",
     "Song Sparrow",
-    "Squirrel",
-    "Starling",
-    "Starling (Juvenile)",
-    "Starling (Young)"
+    "Squirrel"
   ],
-  "num_classes": 14,
-  "trained_on": "2025-07-07T19:00:23.249155",
-  "training_samples": 14
+  "num_classes": 12,
+  "trained_on": "2025-07-08T08:47:00.000000",
+  "training_samples": 464
 }
