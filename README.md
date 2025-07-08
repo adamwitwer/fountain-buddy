@@ -37,7 +37,7 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 4. **Discord notification** → Image + AI prediction + numbered species options sent
 5. **Human verification** → Reply "3" for Blue Jay or type species name
 6. **Automatic updates** → Database and filename updated with correct species
-7. **Self-training** → AI model automatically retrains on your corrections
+7. **Self-training** → AI model retrains nightly at 11:00 PM (when 15+ corrections collected)
 8. **Daily reporting** → Email summary with accurate species data
 
 ## 🚀 Installation
@@ -171,8 +171,9 @@ Receive email summaries at 11 PM with:
 ### AI Model Training
 
 The system continuously learns from your corrections:
-- **Automatic retraining** triggers when 15+ new identifications are collected
-- **Custom classifier** specialized for your specific bird species
+- **Daily auto-retraining** runs at 11:00 PM when 15+ new identifications collected
+- **Automatic model reload** - service picks up new model without restart
+- **Custom classifier** specialized for your specific bird species  
 - **Quality control** ensures only human-verified data is used
 - **Training logs** track model improvements over time
 - **Fallback system** uses original classifier for low-confidence predictions
@@ -191,13 +192,24 @@ The system continuously learns from your corrections:
 ### Data Flow
 
 ```
-Camera → Motion Detection → YOLO → Custom AI Classifier → Discord Notification
-                                                                    ↓
-Database ← File Rename ← Human Response ← Discord Bot ← Human Reply
-    ↓                                                              ↓
-Training Data → Auto Retrain → Updated Model → Better Predictions
-    ↓
-Daily Email ← Species Summary ← Database Query ← Scheduled Task
+**Real-time Detection & Verification:**
+Camera Motion → YOLO Detection → AI Classification → Discord Alert
+      ↓               ↓                ↓               ↓
+   Image Saved → Bird Cropped → Species Predicted → Human Reply
+      ↓               ↓                ↓               ↓  
+Database Record ← File Renamed ← Verified Species ← Bot Processing
+```
+
+**Daily Automated Improvement (11:00 PM):**
+```
+Human Corrections → Training Check → Model Retraining → Auto Reload
+       ↓                 ↓              ↓               ↓
+   (15+ new) → Triggers Training → New Model File → Better AI
+```
+
+**Daily Reporting:**
+```
+Database Query → Species Summary → Email Report → Sent at 11:00 PM
 ```
 
 ### Database Schema
