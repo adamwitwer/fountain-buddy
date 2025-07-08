@@ -222,11 +222,18 @@ class BirdSpeciesTrainer:
         self.model.save(model_path)
         
         # Save class names and metadata
+        # Count total training samples across all species directories
+        total_samples = 0
+        for species_dir in os.listdir(self.train_dir):
+            species_path = os.path.join(self.train_dir, species_dir)
+            if os.path.isdir(species_path):
+                total_samples += len(os.listdir(species_path))
+        
         metadata = {
             'class_names': self.class_names.tolist(),
             'num_classes': len(self.class_names),
             'trained_on': datetime.now().isoformat(),
-            'training_samples': len(os.listdir(self.train_dir))
+            'training_samples': total_samples
         }
         
         metadata_path = os.path.join(self.model_dir, 'model_metadata.json')
@@ -235,6 +242,16 @@ class BirdSpeciesTrainer:
         
         print(f"\nModel saved to: {model_path}")
         print(f"Metadata saved to: {metadata_path}")
+        print(f"Training samples recorded: {total_samples}")
+        
+        # Verify metadata was saved correctly
+        with open(metadata_path, 'r') as f:
+            saved_metadata = json.load(f)
+        
+        if saved_metadata['training_samples'] != total_samples:
+            print(f"WARNING: Metadata mismatch! Expected {total_samples}, got {saved_metadata['training_samples']}")
+        else:
+            print("✅ Metadata verification passed")
         
         return model_path, metadata_path
     

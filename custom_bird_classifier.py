@@ -103,26 +103,24 @@ class CustomBirdClassifier:
         }
     
     def predict_with_fallback(self, image, fallback_func=None):
-        """Predict with fallback to original ImageNet classifier"""
+        """Predict with fallback to Unknown Bird (ImageNet disabled)"""
         try:
             if self.is_loaded:
                 result = self.predict(image)
                 
                 # If confidence is high enough, return custom model result
-                if result['confidence'] > 0.3:
+                if result['confidence'] > 0.15:
                     return result['species'], result['confidence']
+                else:
+                    # Low confidence - return Unknown Bird instead of ImageNet fallback
+                    return "Unknown Bird", result['confidence']
             
-            # Fall back to original classifier if available
-            if fallback_func:
-                return fallback_func(image)
-            
-            return "Unknown", 0.0
+            # No custom model available
+            return "Unknown Bird", 0.0
             
         except Exception as e:
             print(f"Error in custom classifier: {e}")
-            if fallback_func:
-                return fallback_func(image)
-            return "Unknown", 0.0
+            return "Unknown Bird", 0.0
 
 def integrate_with_main_app():
     """Integration instructions for the main application"""

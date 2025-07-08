@@ -559,18 +559,21 @@ def original_classify_bird_species(image_crop):
         return None, 0
 
 def classify_bird_species(image_crop):
-    """Classify bird species using custom model with fallback"""
+    """Classify bird species using custom model (ImageNet disabled)"""
     try:
         if custom_classifier.is_loaded:
             result = custom_classifier.predict(image_crop)
             print(f"Custom classifier: {result['species']} ({result['confidence']:.2f})")
-            if result['confidence'] > 0.3:  # High confidence threshold
+            if result['confidence'] > 0.15:  # Lower threshold for custom model
                 return result['species'], result['confidence']
+            else:
+                print(f"Low confidence ({result['confidence']:.2f}), marking as Unknown Bird")
+                return "Unknown Bird", result['confidence']
     except Exception as e:
         print(f"Custom classifier error: {e}")
     
-    # Fall back to original ImageNet classifier
-    return original_classify_bird_species(image_crop)
+    # No ImageNet fallback - return Unknown Bird
+    return "Unknown Bird", 0.0
 
 def is_bird_species(label):
     """
