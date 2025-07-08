@@ -111,7 +111,7 @@ COMMON_BIRDS = {
     5: "Mourning Dove",
     6: "House Sparrow",
     7: "American Goldfinch",
-    8: "Red-winged Blackbird",
+    8: "European Starling",
     9: "House Finch",
     10: "Gray Catbird"
 }
