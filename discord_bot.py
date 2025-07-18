@@ -76,9 +76,44 @@ async def on_message(message):
         print(f"🔍 Using most recent bird filename: {target_filename}")
     
     if target_filename:
-        success = update_bird_species_from_human(target_filename, species_name)
+        result = update_bird_species_from_human(target_filename, species_name)
         
-        if success:
+        # Handle both old boolean return and new dict return for backwards compatibility
+        if isinstance(result, dict) and result.get("success"):
+            is_correction = result.get("is_correction", False)
+            old_species = result.get("old_species")
+            
+            # Send confirmation in Discord
+            if is_correction:
+                if message.content.isdigit():
+                    response = f"🔄 **Correction accepted!** Changed from **{old_species}** → **{species_name}** (#{message.content})"
+                else:
+                    response = f"🔄 **Correction accepted!** Changed from **{old_species}** → **{species_name}**"
+                await message.add_reaction("🔄")
+            else:
+                if message.content.isdigit():
+                    response = f"✅ Thanks! Identified as **{species_name}** (#{message.content})"
+                else:
+                    response = f"✅ Thanks! Identified as **{species_name}**"
+                await message.add_reaction("✅")
+            
+            await message.reply(response, mention_author=False)
+            
+            # Add appropriate reaction to the original bird detection message if this was a reply
+            if referenced_msg:
+                try:
+                    if is_correction:
+                        await referenced_msg.add_reaction("🔄")
+                    else:
+                        await referenced_msg.add_reaction("✅")
+                    print(f"{'🔄' if is_correction else '✅'} Added reaction to original message")
+                except Exception as e:
+                    print(f"⚠️ Could not add reaction to referenced message: {e}")
+            
+            action = "corrected" if is_correction else "identified"
+            print(f"✅ Successfully {action}: {species_name}")
+            
+        elif result:  # Old boolean return format
             # Send confirmation in Discord
             if message.content.isdigit():
                 response = f"✅ Thanks! Identified as **{species_name}** (#{message.content})"

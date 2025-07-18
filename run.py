@@ -43,6 +43,7 @@ CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD"))
 DETECTION_COOLDOWN_SECONDS = int(os.getenv("DETECTION_COOLDOWN_SECONDS"))
 
 IMAGE_DIR = os.getenv("IMAGE_DIR", "bird_images")
+ACTIVE_IMAGE_DIR = os.path.join(IMAGE_DIR, "active")
 
 # Discord webhook URLs for bird identification
 DISCORD_WEBHOOK_TEST = os.getenv("DISCORD_WEBHOOK_TEST")
@@ -74,7 +75,7 @@ def init_db():
     conn.close()
 
 def record_bird_visit(bird_type, frame, species=None, species_confidence=None):
-    os.makedirs(IMAGE_DIR, exist_ok=True)
+    os.makedirs(ACTIVE_IMAGE_DIR, exist_ok=True)
     timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
     # Include species in filename if available
@@ -84,7 +85,7 @@ def record_bird_visit(bird_type, frame, species=None, species_confidence=None):
     else:
         image_filename = f"bird_{timestamp_str}.jpg"
     
-    image_path = os.path.join(IMAGE_DIR, image_filename)
+    image_path = os.path.join(ACTIVE_IMAGE_DIR, image_filename)
 
     # Save the image
     cv2.imwrite(image_path, frame)
@@ -187,6 +188,9 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
         
         record_id, old_image_path, old_species = result
         
+        # Check if this is a correction (species was already identified by human)
+        is_correction = old_species and old_species != "Unknown Bird" and old_species != human_species
+        
         # Update the species and confidence in database
         cursor.execute("""
             UPDATE bird_visits 
@@ -197,12 +201,15 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
         conn.commit()
         conn.close()
         
-        print(f"✅ Updated database: {filename} → {human_species}")
+        if is_correction:
+            print(f"🔄 Corrected identification: {old_species} → {human_species}")
+        else:
+            print(f"✅ Updated database: {filename} → {human_species}")
         
-        # Rename the image file to include correct species
+        # Handle image file renaming
         if old_image_path and os.path.exists(old_image_path):
             new_filename = rename_image_with_species(old_image_path, human_species)
-            if new_filename:
+            if new_filename and new_filename != old_image_path:
                 # Update database with new filename
                 conn = sqlite3.connect(DB_NAME)
                 cursor = conn.cursor()
@@ -210,9 +217,13 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
                              (new_filename, record_id))
                 conn.commit()
                 conn.close()
-                print(f"✅ Renamed image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
+                
+                if is_correction:
+                    print(f"🔄 Renamed corrected image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
+                else:
+                    print(f"✅ Renamed image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
         
-        return True
+        return {"success": True, "is_correction": is_correction, "old_species": old_species}
         
     except Exception as e:
         print(f"❌ Error updating species: {e}")
@@ -237,6 +248,16 @@ def rename_image_with_species(old_path, species_name):
             new_filename = f"bird_{species_clean}_{timestamp}.jpg"
             new_path = os.path.join(os.path.dirname(old_path), new_filename)
             
+            # Check if new filename is different from current
+            if new_path == old_path:
+                # No change needed
+                return old_path
+            
+            # Check if target file already exists (shouldn't happen, but safety check)
+            if os.path.exists(new_path):
+                print(f"⚠️ Target file {new_filename} already exists, skipping rename")
+                return old_path
+            
             # Rename the file
             os.rename(old_path, new_path)
             return new_path
@@ -244,6 +265,21 @@ def rename_image_with_species(old_path, species_name):
             print(f"⚠️ Could not extract timestamp from {old_filename}")
             return old_path
             
+    except FileNotFoundError:
+        print(f"⚠️ Original file {old_path} not found (may have been renamed already)")
+        # Try to find the file with the new species name
+        directory = os.path.dirname(old_path)
+        old_filename = os.path.basename(old_path)
+        timestamp_match = re.search(r'\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}', old_filename)
+        
+        if timestamp_match:
+            timestamp = timestamp_match.group(0)
+            species_clean = species_name.replace(" ", "_").replace("(", "").replace(")", "")
+            new_filename = f"bird_{species_clean}_{timestamp}.jpg"
+            new_path = os.path.join(directory, new_filename)
+            return new_path
+        
+        return old_path
     except Exception as e:
         print(f"❌ Error renaming image: {e}")
         return old_path
