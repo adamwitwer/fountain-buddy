@@ -17,7 +17,37 @@ load_dotenv()
 
 # Discord configuration
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID")) if os.getenv("DISCORD_CHANNEL_ID") else None
+
+# Multi-channel support
+FOUNTAIN_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_FOUNTAIN_ID")) if os.getenv("DISCORD_CHANNEL_FOUNTAIN_ID") else None
+PEANUT_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_PEANUT_ID")) if os.getenv("DISCORD_CHANNEL_PEANUT_ID") else None
+
+# Backwards compatibility
+DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID")) if os.getenv("DISCORD_CHANNEL_ID") else FOUNTAIN_CHANNEL_ID
+
+# Channel to location mapping
+CHANNEL_LOCATIONS = {}
+if FOUNTAIN_CHANNEL_ID:
+    CHANNEL_LOCATIONS[FOUNTAIN_CHANNEL_ID] = 'fountain'
+if PEANUT_CHANNEL_ID:
+    CHANNEL_LOCATIONS[PEANUT_CHANNEL_ID] = 'peanut'
+
+# Location-specific bird species (imported from camera_manager)
+from camera_manager import create_camera_managers
+
+# Get camera managers to access species lists
+try:
+    cameras = create_camera_managers()
+    LOCATION_BIRDS = {
+        'fountain': cameras.get('fountain', {}).common_birds if 'fountain' in cameras else COMMON_BIRDS,
+        'peanut': cameras.get('peanut', {}).common_birds if 'peanut' in cameras else {}
+    }
+except:
+    # Fallback if camera_manager fails
+    LOCATION_BIRDS = {
+        'fountain': COMMON_BIRDS,
+        'peanut': {}
+    }
 
 # Setup Discord client
 intents = discord.Intents.default()
@@ -27,14 +57,22 @@ client = discord.Client(intents=intents)
 @client.event
 async def on_ready():
     print(f'🤖 Discord bot logged in as {client.user}')
-    if DISCORD_CHANNEL_ID:
-        channel = client.get_channel(DISCORD_CHANNEL_ID)
+    
+    # Monitor multiple channels
+    monitored_channels = []
+    
+    for channel_id, location in CHANNEL_LOCATIONS.items():
+        channel = client.get_channel(channel_id)
         if channel:
-            print(f'👁️ Monitoring channel: #{channel.name}')
+            monitored_channels.append(f'#{channel.name} ({location})')
+            print(f'👁️ Monitoring {location} channel: #{channel.name}')
         else:
-            print(f'❌ Could not find channel with ID: {DISCORD_CHANNEL_ID}')
+            print(f'❌ Could not find {location} channel with ID: {channel_id}')
+    
+    if not monitored_channels:
+        print('⚠️ No Discord channels configured for monitoring')
     else:
-        print('⚠️ No DISCORD_CHANNEL_ID configured')
+        print(f'🔄 Monitoring {len(monitored_channels)} channels: {", ".join(monitored_channels)}')
 
 @client.event
 async def on_message(message):
@@ -42,18 +80,21 @@ async def on_message(message):
     if message.author == client.user or message.webhook_id:
         return
     
-    # Only process messages in the bird identification channel
-    if DISCORD_CHANNEL_ID and message.channel.id != DISCORD_CHANNEL_ID:
+    # Check if message is in a monitored channel
+    if message.channel.id not in CHANNEL_LOCATIONS:
         return
     
-    # Parse the human response
-    species_name = parse_human_response(message.content)
+    # Get the location for this channel
+    location = CHANNEL_LOCATIONS[message.channel.id]
+    
+    # Parse the human response using location-specific species list
+    species_name = parse_human_response_for_location(message.content, location)
     
     if not species_name:
         # Not a valid bird identification response
         return
     
-    print(f"📝 Human identification received: '{message.content}' → {species_name}")
+    print(f"📝 Human identification received from {location}: '{message.content}' → {species_name}")
     
     # Find the bird filename associated with this conversation
     # If replying to a message, get filename from that specific message
@@ -141,6 +182,29 @@ async def on_message(message):
         await message.reply("❓ Couldn't find a recent bird image to identify. Please make sure you're responding to a recent detection.", mention_author=False)
         print("❓ No recent bird filename found for identification")
 
+def parse_human_response_for_location(message_content, location):
+    """Parse human response using location-specific species list."""
+    
+    content = message_content.strip()
+    
+    # Get species list for this location
+    location_birds = LOCATION_BIRDS.get(location, {})
+    
+    # Check if it's a numbered response
+    if content.isdigit():
+        number = int(content)
+        if number in location_birds:
+            return location_birds[number]
+        else:
+            return None  # Invalid number for this location
+    
+    # Check if it's a direct species name
+    # Clean up the input and capitalize properly
+    if len(content) > 1:
+        return content.title()
+    
+    return None
+
 def extract_filename_from_message(message):
     """Extract filename from a Discord message."""
     
@@ -199,11 +263,13 @@ def run_discord_bot():
         print("❌ DISCORD_BOT_TOKEN not configured. Discord bot disabled.")
         return
     
-    if not DISCORD_CHANNEL_ID:
-        print("❌ DISCORD_CHANNEL_ID not configured. Discord bot disabled.")
+    if not CHANNEL_LOCATIONS:
+        print("❌ No Discord channels configured. Discord bot disabled.")
+        print("   Please set DISCORD_CHANNEL_FOUNTAIN_ID and/or DISCORD_CHANNEL_PEANUT_ID")
         return
     
-    print("🚀 Starting Discord bot for bird identification...")
+    print(f"🚀 Starting Discord bot for multi-channel bird identification...")
+    print(f"   Monitoring {len(CHANNEL_LOCATIONS)} channels: {list(CHANNEL_LOCATIONS.values())}")
     
     try:
         client.run(DISCORD_BOT_TOKEN)
