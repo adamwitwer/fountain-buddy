@@ -202,7 +202,16 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
         record_id, old_image_path, old_species = result
         
         # Check if this is a correction (species was already identified by human)
+        # Allow unlimited corrections - any change from previous species is a correction
         is_correction = old_species and old_species != "Unknown Bird" and old_species != human_species
+        
+        # Track if this was already human-verified (confidence = 1.0 means human identification)
+        cursor.execute("SELECT confidence FROM bird_visits WHERE id = ?", (record_id,))
+        confidence_result = cursor.fetchone()
+        was_human_verified = confidence_result and confidence_result[0] == 1.0
+        
+        # This is a re-correction if it was already human-verified
+        is_recorrection = is_correction and was_human_verified
         
         # Update the species and confidence in database
         cursor.execute("""
@@ -214,7 +223,9 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
         conn.commit()
         conn.close()
         
-        if is_correction:
+        if is_recorrection:
+            print(f"🔁 Re-corrected identification: {old_species} → {human_species}")
+        elif is_correction:
             print(f"🔄 Corrected identification: {old_species} → {human_species}")
         else:
             print(f"✅ Updated database: {filename} → {human_species}")
@@ -231,12 +242,14 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
                 conn.commit()
                 conn.close()
                 
-                if is_correction:
+                if is_recorrection:
+                    print(f"🔁 Renamed re-corrected image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
+                elif is_correction:
                     print(f"🔄 Renamed corrected image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
                 else:
                     print(f"✅ Renamed image: {os.path.basename(old_image_path)} → {os.path.basename(new_filename)}")
         
-        return {"success": True, "is_correction": is_correction, "old_species": old_species}
+        return {"success": True, "is_correction": is_correction, "is_recorrection": is_recorrection, "old_species": old_species}
         
     except Exception as e:
         print(f"❌ Error updating species: {e}")

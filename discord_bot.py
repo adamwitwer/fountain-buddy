@@ -122,10 +122,17 @@ async def on_message(message):
         # Handle both old boolean return and new dict return for backwards compatibility
         if isinstance(result, dict) and result.get("success"):
             is_correction = result.get("is_correction", False)
+            is_recorrection = result.get("is_recorrection", False)
             old_species = result.get("old_species")
             
-            # Send confirmation in Discord
-            if is_correction:
+            # Send enhanced confirmation in Discord
+            if is_recorrection:
+                if message.content.isdigit():
+                    response = f"🔁 **Re-correction accepted!** Changed from **{old_species}** → **{species_name}** (#{message.content})\n💡 *You can always correct again if needed!*"
+                else:
+                    response = f"🔁 **Re-correction accepted!** Changed from **{old_species}** → **{species_name}**\n💡 *You can always correct again if needed!*"
+                await message.add_reaction("🔁")
+            elif is_correction:
                 if message.content.isdigit():
                     response = f"🔄 **Correction accepted!** Changed from **{old_species}** → **{species_name}** (#{message.content})"
                 else:
@@ -143,23 +150,28 @@ async def on_message(message):
             # Add appropriate reaction to the original bird detection message if this was a reply
             if referenced_msg:
                 try:
-                    if is_correction:
+                    if is_recorrection:
+                        # Add 🔁 for re-corrections, but keep previous reactions to show history
+                        await referenced_msg.add_reaction("🔁")
+                        print(f"🔁 Added re-correction reaction to original message")
+                    elif is_correction:
                         await referenced_msg.add_reaction("🔄")
+                        print(f"🔄 Added correction reaction to original message")
                     else:
                         await referenced_msg.add_reaction("✅")
-                    print(f"{'🔄' if is_correction else '✅'} Added reaction to original message")
+                        print(f"✅ Added identification reaction to original message")
                 except Exception as e:
                     print(f"⚠️ Could not add reaction to referenced message: {e}")
             
-            action = "corrected" if is_correction else "identified"
-            print(f"✅ Successfully {action}: {species_name}")
+            action = "re-corrected" if is_recorrection else ("corrected" if is_correction else "identified")
+            print(f"✅ Successfully {action}: {old_species} → {species_name}" if is_correction else f"✅ Successfully {action}: {species_name}")
             
         elif result:  # Old boolean return format
             # Send confirmation in Discord
             if message.content.isdigit():
-                response = f"✅ Thanks! Identified as **{species_name}** (#{message.content})"
+                response = f"✅ Thanks! Identified as **{species_name}** (#{message.content})\n💡 *You can always reply again to correct if needed!*"
             else:
-                response = f"✅ Thanks! Identified as **{species_name}**"
+                response = f"✅ Thanks! Identified as **{species_name}**\n💡 *You can always reply again to correct if needed!*"
             
             await message.add_reaction("✅")
             await message.reply(response, mention_author=False)
