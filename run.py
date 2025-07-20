@@ -21,6 +21,7 @@ from tensorflow.keras.applications.resnet50 import preprocess_input, decode_pred
 from PIL import Image
 from custom_bird_classifier import CustomBirdClassifier
 from auto_retrain import AutoRetrainer
+from camera_manager import CameraManager, create_camera_managers
 
 # Load environment variables from .env file
 load_dotenv()
@@ -74,8 +75,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-def record_bird_visit(bird_type, frame, species=None, species_confidence=None):
-    os.makedirs(ACTIVE_IMAGE_DIR, exist_ok=True)
+def record_bird_visit(bird_type, frame, camera_manager, species=None, species_confidence=None):
+    """Record a bird visit with location awareness."""
+    
     timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     
     # Include species in filename if available
@@ -85,20 +87,27 @@ def record_bird_visit(bird_type, frame, species=None, species_confidence=None):
     else:
         image_filename = f"bird_{timestamp_str}.jpg"
     
-    image_path = os.path.join(ACTIVE_IMAGE_DIR, image_filename)
+    image_path = camera_manager.get_image_path(image_filename)
 
     # Save the image
     cv2.imwrite(image_path, frame)
 
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO bird_visits (timestamp, bird_type, species, confidence, image_path) VALUES (?, ?, ?, ?, ?)",
-                   (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), bird_type, species, species_confidence, image_path))
+    cursor.execute("""
+        INSERT INTO bird_visits (timestamp, bird_type, species, confidence, image_path, location, camera_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+        bird_type, species, species_confidence, image_path,
+        camera_manager.location, camera_manager.camera_id
+    ))
     conn.commit()
     conn.close()
     
     species_info = f" ({species}, {species_confidence:.2f})" if species else ""
-    print(f"Recorded bird visit: {bird_type}{species_info} at {timestamp_str}")
+    location_emoji = camera_manager.get_location_emoji()
+    print(f"{location_emoji} Recorded bird visit: {bird_type}{species_info} at {camera_manager.location} - {timestamp_str}")
     return image_path
 
 # --- Discord Bird Identification Functions ---
@@ -117,21 +126,24 @@ COMMON_BIRDS = {
     10: "Gray Catbird"
 }
 
-def send_bird_to_discord(image_path, yolo_confidence, ai_species=None, ai_confidence=None):
+def send_bird_to_discord(image_path, camera_manager, yolo_confidence, ai_species=None, ai_confidence=None):
     """Send bird image to Discord for human identification."""
     
     if not USE_DISCORD:
         return
     
-    webhook_url = DISCORD_WEBHOOK_PROD  # Use production webhook
+    webhook_url = camera_manager.webhook_url
     if not webhook_url:
-        print("❌ Discord webhook not configured")
+        print(f"❌ Discord webhook not configured for {camera_manager.location}")
         return
     
     try:
+        location_emoji = camera_manager.get_location_emoji()
+        location_name = camera_manager.location.title()
+        
         # Create the message with numbered options
         message_lines = [
-            f"🐦 **New bird detected!** YOLO confidence: {yolo_confidence:.2f}",
+            f"{location_emoji} **New bird at {location_name}!** YOLO confidence: {yolo_confidence:.2f}",
         ]
         
         if ai_species and ai_confidence:
@@ -142,14 +154,15 @@ def send_bird_to_discord(image_path, yolo_confidence, ai_species=None, ai_confid
             "**What species is this? Reply with number:**",
         ])
         
-        # Add numbered common birds
-        for num, species in COMMON_BIRDS.items():
+        # Add numbered common birds for this location
+        for num, species in camera_manager.common_birds.items():
             message_lines.append(f"{num}. {species}")
         
         message_lines.extend([
             "",
             "**Or reply with the species name for others**",
-            f"📁 File: `{os.path.basename(image_path)}`"
+            f"📁 File: `{os.path.basename(image_path)}`",
+            f"📍 Location: {location_name}"
         ])
         
         message_content = "\n".join(message_lines)
@@ -162,10 +175,10 @@ def send_bird_to_discord(image_path, yolo_confidence, ai_species=None, ai_confid
             response = requests.post(webhook_url, data=data, files=files, timeout=10)
             response.raise_for_status()
             
-        print(f"✅ Bird image sent to Discord: {os.path.basename(image_path)}")
+        print(f"✅ Bird image sent to Discord ({location_name}): {os.path.basename(image_path)}")
         
     except Exception as e:
-        print(f"❌ Failed to send to Discord: {e}")
+        print(f"❌ Failed to send to Discord ({camera_manager.location}): {e}")
 
 def update_bird_species_from_human(filename, human_species, human_confidence=1.0):
     """Update bird species in database based on human identification."""
@@ -641,94 +654,116 @@ def format_species_name(label):
     
     return formatted
 
-def main_loop():
-    global last_detection_time_bird
+def process_bird_detection(camera_manager):
+    """Process bird detection for a specific camera."""
     
-    ai_capabilities = get_ai_capabilities()
-    supports_dog_cat_ai = ai_capabilities.get("supportAiDogCat", {}).get("permit", 0) > 0
-    print(f"Camera supports Dog/Cat AI detection: {supports_dog_cat_ai}")
+    print(f"{camera_manager.get_location_emoji()} Motion/AI triggered on {camera_manager.location} camera")
+    snapshot_data = camera_manager.capture_snapshot()
+    
+    if snapshot_data:
+        # Convert snapshot data to OpenCV image format
+        np_array = np.frombuffer(snapshot_data, np.uint8)
+        frame = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
-    while True:
-        motion_detected = False
-        if supports_dog_cat_ai:
-            ai_state = get_ai_state()
-            if ai_state and ai_state.get("dog_cat", {}).get("alarm_state") == 1:
-                print("AI Dog/Cat alarm detected!")
-                motion_detected = True
-        else:
-            md_state = get_md_state()
-            if md_state == 1:
-                print("General Motion Detected!")
-                motion_detected = True
-        if motion_detected:
-            current_time = time.time()
-            if (current_time - last_detection_time_bird) > DETECTION_COOLDOWN_SECONDS:
-                print("Motion event triggering snapshot and bird detection...")
-                snapshot_data = capture_snapshot()
+        if frame is not None and yolo_model:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = yolo_model(frame_rgb, verbose=False)
+            birds_found = []
+            bird_crops = []
+            
+            for r in results:
+                for box in r.boxes:
+                    conf = box.conf[0].item()
+                    cls = int(box.cls[0].item())
+                    # Assuming COCO dataset where 'bird' is class 14
+                    if conf > CONFIDENCE_THRESHOLD and cls == BIRD_CLASS_ID:
+                        # Get bounding box coordinates
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        
+                        # Extract bird crop for species classification
+                        bird_crop = frame[y1:y2, x1:x2]
+                        bird_crops.append(bird_crop)
+                        
+                        # Optional: Draw bounding box for debugging
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(frame, f"Bird {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        birds_found.append({"label": "bird", "confidence": conf})
+
+            if birds_found:
+                print(f"🐦 Bird detected by YOLO at {camera_manager.location}! Found {len(birds_found)} instances.")
                 
-                if snapshot_data:
-                    # Convert snapshot data to OpenCV image format
-                    np_array = np.frombuffer(snapshot_data, np.uint8)
-                    frame = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-
-                    if frame is not None and yolo_model:
-                        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        results = yolo_model(frame_rgb, verbose=False)
-                        birds_found = []
-                        bird_crops = []
-                        for r in results:
-                            for box in r.boxes:
-                                conf = box.conf[0].item()
-                                cls = int(box.cls[0].item())
-                                # Assuming COCO dataset where 'bird' is class 14
-                                if conf > CONFIDENCE_THRESHOLD and cls == BIRD_CLASS_ID:
-                                    # Get bounding box coordinates
-                                    x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                                    
-                                    # Extract bird crop for species classification
-                                    bird_crop = frame[y1:y2, x1:x2]
-                                    bird_crops.append(bird_crop)
-                                    
-                                    # Optional: Draw bounding box for debugging if displaying frame
-                                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                                    cv2.putText(frame, f"Bird {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                                    birds_found.append({"label": "bird", "confidence": conf})
-
-                        if birds_found:
-                            print(f"Actual bird detected by YOLO! Found {len(birds_found)} instances.")
-                            
-                            # Classify species for the first (largest) bird detection
-                            species_name = None
-                            species_confidence = None
-                            if bird_crops and bird_classifier:
-                                try:
-                                    # Use the largest bird crop for species classification
-                                    largest_crop = max(bird_crops, key=lambda crop: crop.shape[0] * crop.shape[1])
-                                    species_name, species_confidence = classify_bird_species(largest_crop)
-                                    if species_name:
-                                        print(f"Species identified: {species_name} (confidence: {species_confidence:.2f})")
-                                except Exception as e:
-                                    print(f"Error during species classification: {e}")
-                            
-                            image_path = record_bird_visit("bird", frame, species_name, species_confidence)
-                            
-                            # Send to Discord for human identification
-                            if USE_DISCORD:
-                                # Get the highest YOLO confidence from detections
-                                max_yolo_confidence = max(bird['confidence'] for bird in birds_found)
-                                send_bird_to_discord(image_path, max_yolo_confidence, species_name, species_confidence)
-                            
-                            last_detection_time_bird = current_time
-                        else:
-                            print("No birds identified by YOLO, but motion/AI detected.")
-                    else:
-                        print("Could not decode snapshot or YOLO model not loaded.")
-                else:
-                    print("Failed to get snapshot from camera.")
+                # Classify species for the first (largest) bird detection
+                species_name = None
+                species_confidence = None
+                if bird_crops:
+                    try:
+                        # Use the largest bird crop for species classification
+                        largest_crop = max(bird_crops, key=lambda crop: crop.shape[0] * crop.shape[1])
+                        species_name, species_confidence = classify_bird_species(largest_crop)
+                        if species_name:
+                            print(f"🤖 Species identified: {species_name} (confidence: {species_confidence:.2f})")
+                    except Exception as e:
+                        print(f"❌ Error during species classification: {e}")
+                
+                # Record the bird visit
+                image_path = record_bird_visit("bird", frame, camera_manager, species_name, species_confidence)
+                
+                # Send to Discord for human identification
+                if USE_DISCORD:
+                    # Get the highest YOLO confidence from detections
+                    max_yolo_confidence = max(bird['confidence'] for bird in birds_found)
+                    send_bird_to_discord(image_path, camera_manager, max_yolo_confidence, species_name, species_confidence)
+                
+                return True
             else:
-                print(f"Motion detected, but within cooldown period ({DETECTION_COOLDOWN_SECONDS}s). Skipping detection.")
+                print(f"🔍 No birds identified by YOLO at {camera_manager.location}, but motion/AI detected.")
+        else:
+            print(f"❌ Could not decode snapshot from {camera_manager.location} or YOLO model not loaded.")
+    else:
+        print(f"❌ Failed to get snapshot from {camera_manager.location} camera.")
+    
+    return False
+
+def main_loop():
+    """Main detection loop for multiple cameras."""
+    
+    # Initialize camera managers
+    cameras = create_camera_managers()
+    
+    if not cameras:
+        print("❌ No cameras configured. Please check your .env file.")
+        return
+    
+    print(f"🚀 Starting multi-camera bird detection with {len(cameras)} cameras:")
+    for camera_id, camera in cameras.items():
+        print(f"   📷 {camera_id}: {camera.location} at {camera.ip}")
+    
+    # Track last detection time per camera to implement cooldown
+    last_detection_times = {camera_id: 0 for camera_id in cameras.keys()}
+    
+    print(f"🔄 Monitoring {len(cameras)} cameras for bird activity...")
+    
+    while True:
+        for camera_id, camera_manager in cameras.items():
+            try:
+                # Check if motion/AI is detected for this camera
+                if camera_manager.motion_detected():
+                    current_time = time.time()
+                    
+                    # Check cooldown period for this specific camera
+                    if (current_time - last_detection_times[camera_id]) > DETECTION_COOLDOWN_SECONDS:
+                        # Process bird detection for this camera
+                        if process_bird_detection(camera_manager):
+                            last_detection_times[camera_id] = current_time
+                    else:
+                        remaining_cooldown = DETECTION_COOLDOWN_SECONDS - (current_time - last_detection_times[camera_id])
+                        print(f"⏳ {camera_manager.location} camera in cooldown ({remaining_cooldown:.1f}s remaining)")
+                        
+            except Exception as e:
+                print(f"❌ Error processing {camera_id} camera: {e}")
+                time.sleep(5)  # Brief pause before retrying this camera
         
-        time.sleep(1) # Poll every second for motion/AI events
+        time.sleep(1)  # Poll every second for motion/AI events
 
 if __name__ == "__main__":
     init_db()

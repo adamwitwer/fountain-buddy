@@ -13,10 +13,25 @@ from tensorflow.keras.preprocessing.image import img_to_array
 import cv2
 
 class CustomBirdClassifier:
-    def __init__(self, model_path='models/fountain_buddy_bird_classifier.h5', 
-                 metadata_path='models/model_metadata.json'):
-        self.model_path = model_path
-        self.metadata_path = metadata_path
+    def __init__(self, model_path=None, metadata_path=None):
+        # Try unified model first, fall back to original
+        if model_path is None:
+            unified_model = 'models/fountain_buddy_unified_classifier.h5'
+            unified_metadata = 'models/unified_model_metadata.json'
+            
+            if os.path.exists(unified_model) and os.path.exists(unified_metadata):
+                self.model_path = unified_model
+                self.metadata_path = unified_metadata
+                self.model_version = "unified"
+            else:
+                self.model_path = 'models/fountain_buddy_bird_classifier.h5'
+                self.metadata_path = 'models/model_metadata.json'
+                self.model_version = "legacy"
+        else:
+            self.model_path = model_path
+            self.metadata_path = metadata_path
+            self.model_version = "custom"
+            
         self.model = None
         self.class_names = None
         self.is_loaded = False
@@ -42,7 +57,8 @@ class CustomBirdClassifier:
             self.class_names = metadata['class_names']
             self.is_loaded = True
             
-            print(f"Loaded custom bird classifier with {len(self.class_names)} species:")
+            version_info = f" ({self.model_version})" if hasattr(self, 'model_version') else ""
+            print(f"Loaded custom bird classifier{version_info} with {len(self.class_names)} species:")
             for i, species in enumerate(self.class_names):
                 print(f"  {i}: {species}")
             

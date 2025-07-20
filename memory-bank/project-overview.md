@@ -108,6 +108,15 @@ bird_visits (
 - **Continuous**: Bird detection, Discord notifications, human verification
 - **Background**: Photo organization and cleanup scheduling
 
+## 🚀 Deployment & Services
+- **`fountain-buddy`** - systemd service running main detection loop (run.py)
+- **`discordbot`** - systemd service running Discord monitoring (discord_bot.py)
+- **Restart both services** after configuration changes:
+  ```bash
+  sudo systemctl restart fountain-buddy
+  sudo systemctl restart discordbot
+  ```
+
 ## 🐦 Common Bird Species (Numbered List)
 1. Northern Cardinal
 2. American Robin

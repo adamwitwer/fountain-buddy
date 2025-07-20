@@ -184,4 +184,6 @@ yolov8*.pt
 discord_bot.log
 nohup.out
 training_data/
+training_data_unified/
+training_log.json
 models/
