@@ -109,7 +109,7 @@ class AutoRetrainer:
                 ['./venv/bin/python', 'bird_trainer_enhanced.py'],
                 capture_output=True,
                 text=True,
-                timeout=3600  # 1 hour timeout
+                timeout=7200  # 2 hour timeout
             )
             
             if result.returncode == 0:
