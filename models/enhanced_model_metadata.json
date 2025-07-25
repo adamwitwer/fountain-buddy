@@ -4,12 +4,10 @@
     "American Robin",
     "Black-capped Chickadee",
     "Blue Jay",
-    "Catbird",
     "Common Grackle",
     "Downy Woodpecker",
     "European Starling",
     "Gray Catbird",
-    "Hairy Woodpecker",
     "House Finch",
     "House Sparrow",
     "Mourning Dove",
@@ -17,43 +15,39 @@
     "Red-bellied Woodpecker",
     "Red-winged Blackbird",
     "Song Sparrow",
-    "Squirrel",
     "Tufted Titmouse",
     "White-breasted Nuthatch"
   ],
-  "num_classes": 19,
+  "num_classes": 16,
   "image_size": [
     224,
     224
   ],
-  "training_date": "2025-07-25T10:55:03.688674",
+  "training_date": "2025-07-25T18:21:42.427487",
   "dataset_stats": {
-    "Gray_Catbird": 206,
-    "Tufted_Titmouse": 7,
-    "Downy_Woodpecker": 47,
-    "European_Starling": 342,
-    "House_Sparrow": 212,
-    "Red-bellied_Woodpecker": 120,
-    "Northern_Cardinal": 235,
-    "Black-capped_Chickadee": 4,
-    "American_Robin": 183,
-    "White-breasted_Nuthatch": 9,
-    "Squirrel": 4,
-    "Mourning_Dove": 225,
-    "Hairy_Woodpecker": 1,
-    "Blue_Jay": 107,
+    "Downy_Woodpecker": 50,
+    "Black-capped_Chickadee": 96,
     "Common_Grackle": 104,
-    "Red-winged_Blackbird": 1,
-    "House_Finch": 5,
-    "Song_Sparrow": 1,
-    "Catbird": 1
+    "Blue_Jay": 108,
+    "Tufted_Titmouse": 120,
+    "White-breasted_Nuthatch": 120,
+    "Red-winged_Blackbird": 120,
+    "House_Finch": 120,
+    "Song_Sparrow": 120,
+    "Red-bellied_Woodpecker": 126,
+    "American_Robin": 150,
+    "Gray_Catbird": 150,
+    "Mourning_Dove": 150,
+    "House_Sparrow": 150,
+    "Northern_Cardinal": 150,
+    "European_Starling": 150
   },
-  "total_training_samples": 1814,
+  "total_training_samples": 1984,
   "training_history": {
-    "final_accuracy": 0.3024691343307495,
-    "final_val_accuracy": 0.11235955357551575,
-    "best_val_accuracy": 0.1994381994009018,
-    "epochs_completed": 13
+    "final_accuracy": 0.3027060925960541,
+    "final_val_accuracy": 0.24810126423835754,
+    "best_val_accuracy": 0.26582279801368713,
+    "epochs_completed": 16
   },
   "model_architecture": "ResNet50 + Custom Head",
   "data_sources": [
@@ -62,9 +56,15 @@
   ],
   "optimization_features": [
     "mixed_data_sources",
+    "dataset_balancing",
     "aggressive_augmentation",
     "learning_rate_scheduling",
     "early_stopping",
     "transfer_learning"
-  ]
+  ],
+  "balancing_config": {
+    "max_samples_per_species": 100,
+    "min_samples_per_species": 10,
+    "prioritizes_human_verified": true
+  }
 }

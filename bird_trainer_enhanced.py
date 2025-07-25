@@ -47,8 +47,8 @@ class EnhancedBirdTrainer:
         os.makedirs(self.model_dir, exist_ok=True)
         
     def create_unified_dataset(self):
-        """Combine human-verified and NABirds data into unified training structure"""
-        print("Creating unified training dataset...")
+        """Combine human-verified and NABirds data into unified training structure with balancing"""
+        print("Creating unified training dataset with balancing...")
         
         # Clear existing unified data
         if os.path.exists(self.unified_dir):
@@ -56,67 +56,175 @@ class EnhancedBirdTrainer:
         os.makedirs(self.unified_dir, exist_ok=True)
         
         dataset_stats = Counter()
+        species_files = {}  # Track files per species for balancing
+        
+        # Balancing parameters
+        MAX_SAMPLES_PER_SPECIES = 150
+        MIN_SAMPLES_PER_SPECIES = 20  # Increased to filter out problematic species
+        
+        # Species to exclude (insufficient data even with NABirds)
+        EXCLUDED_SPECIES = {'Hairy_Woodpecker', 'Catbird', 'Squirrel'}
         
         # Step 1: Load human-verified data from database
         human_data = self.load_human_verified_data()
         print(f"Loaded {len(human_data)} human-verified samples")
         
-        # Step 2: Copy human-verified images by species
+        # Step 2: Collect all available files per species first
+        print("Collecting available samples per species...")
+        
+        # Collect human-verified files
         for species, image_path, timestamp in human_data:
             if not species or species in ['Unknown; Not A Bird', 'Not A Bird']:
                 continue
                 
-            # Clean species name for directory
             clean_species = species.replace(' ', '_').replace('/', '_')
-            species_dir = os.path.join(self.unified_dir, clean_species)
-            os.makedirs(species_dir, exist_ok=True)
+            if clean_species not in species_files:
+                species_files[clean_species] = []
             
-            # Copy with descriptive filename
             if os.path.exists(image_path):
                 timestamp_str = timestamp.replace(':', '-').replace(' ', '_')
                 filename = f"human_{timestamp_str}_{os.path.basename(image_path)}"
-                dst_path = os.path.join(species_dir, filename)
-                
-                try:
-                    shutil.copy2(image_path, dst_path)
-                    dataset_stats[clean_species] += 1
-                except Exception as e:
-                    print(f"Error copying {image_path}: {e}")
+                species_files[clean_species].append({
+                    'src': image_path,
+                    'dst_filename': filename,
+                    'source': 'human'
+                })
         
-        # Step 3: Add NABirds data if available
+        # Collect NABirds files
         if os.path.exists(self.nabirds_dir):
-            print("Adding NABirds professional images...")
+            print("Collecting NABirds professional images...")
             
             for species_dir in os.listdir(self.nabirds_dir):
                 species_path = os.path.join(self.nabirds_dir, species_dir)
                 if not os.path.isdir(species_path):
                     continue
                 
-                # Create unified species directory
-                unified_species_dir = os.path.join(self.unified_dir, species_dir)
-                os.makedirs(unified_species_dir, exist_ok=True)
+                if species_dir not in species_files:
+                    species_files[species_dir] = []
                 
-                # Copy NABirds images
                 for image_file in os.listdir(species_path):
                     if image_file.lower().endswith(('.jpg', '.jpeg', '.png')):
                         src_path = os.path.join(species_path, image_file)
-                        dst_path = os.path.join(unified_species_dir, image_file)
-                        
-                        try:
-                            shutil.copy2(src_path, dst_path)
-                            dataset_stats[species_dir] += 1
-                        except Exception as e:
-                            print(f"Error copying NABirds image {src_path}: {e}")
+                        species_files[species_dir].append({
+                            'src': src_path,
+                            'dst_filename': image_file,
+                            'source': 'nabirds'
+                        })
         
-        # Print dataset statistics
-        print("\nUnified Dataset Statistics:")
-        print("-" * 40)
-        total_samples = 0
-        for species, count in sorted(dataset_stats.items()):
-            print(f"{species.replace('_', ' '):25} {count:4d} samples")
-            total_samples += count
-        print("-" * 40)
-        print(f"{'Total':25} {total_samples:4d} samples")
+        # Step 3: Apply balancing and copy files
+        print("Applying dataset balancing...")
+        
+        # Prioritize species with fewer samples
+        species_by_count = sorted(species_files.items(), key=lambda x: len(x[1]))
+        
+        balancing_report = []
+        
+        for species, files in species_by_count:
+            available_count = len(files)
+            
+            # Skip excluded species
+            if species in EXCLUDED_SPECIES:
+                print(f"⚠️  Excluding {species.replace('_', ' ')}: insufficient reliable data")
+                continue
+            
+            # Determine target count
+            if available_count < MIN_SAMPLES_PER_SPECIES:
+                print(f"⚠️  Skipping {species.replace('_', ' ')}: only {available_count} samples (minimum {MIN_SAMPLES_PER_SPECIES})")
+                continue
+            elif available_count <= MAX_SAMPLES_PER_SPECIES:
+                target_count = available_count  # Use all available
+                status = "BALANCED"
+            else:
+                target_count = MAX_SAMPLES_PER_SPECIES  # Cap at maximum
+                status = "CAPPED"
+            
+            # Create species directory
+            species_dir = os.path.join(self.unified_dir, species)
+            os.makedirs(species_dir, exist_ok=True)
+            
+            # Select files to use (prioritize human-verified, then random selection)
+            human_files = [f for f in files if f['source'] == 'human']
+            nabirds_files = [f for f in files if f['source'] == 'nabirds']
+            
+            selected_files = []
+            
+            # Always include all human-verified files first
+            selected_files.extend(human_files)
+            
+            # Add NABirds files if we need more
+            if len(selected_files) < target_count:
+                remaining_needed = target_count - len(selected_files)
+                # Randomly select from NABirds files
+                import random
+                random.seed(42)  # For reproducibility
+                nabirds_sample = random.sample(nabirds_files, min(remaining_needed, len(nabirds_files)))
+                selected_files.extend(nabirds_sample)
+            
+            # If we have too many (shouldn't happen with current logic, but safety check)
+            if len(selected_files) > target_count:
+                # Keep all human files, randomly sample NABirds
+                if len(human_files) <= target_count:
+                    remaining_slots = target_count - len(human_files)
+                    nabirds_in_selection = [f for f in selected_files if f['source'] == 'nabirds']
+                    random.seed(42)
+                    nabirds_final = random.sample(nabirds_in_selection, remaining_slots)
+                    selected_files = human_files + nabirds_final
+                else:
+                    # Even human files exceed target (rare case)
+                    random.seed(42)
+                    selected_files = random.sample(human_files, target_count)
+            
+            # Copy selected files
+            copied_count = 0
+            for file_info in selected_files:
+                dst_path = os.path.join(species_dir, file_info['dst_filename'])
+                try:
+                    shutil.copy2(file_info['src'], dst_path)
+                    copied_count += 1
+                except Exception as e:
+                    print(f"Error copying {file_info['src']}: {e}")
+            
+            dataset_stats[species] = copied_count
+            balancing_report.append({
+                'species': species,
+                'available': available_count,
+                'target': target_count,
+                'copied': copied_count,
+                'status': status,
+                'human_files': len(human_files),
+                'nabirds_files': len(nabirds_files)
+            })
+        
+        # Print detailed balancing report
+        print("\nDataset Balancing Report:")
+        print("=" * 80)
+        print(f"{'Species':25} {'Available':>9} {'Target':>7} {'Used':>6} {'Status':>10} {'Human':>6} {'NABirds':>8}")
+        print("-" * 80)
+        
+        for report in balancing_report:
+            print(f"{report['species'].replace('_', ' '):25} "
+                  f"{report['available']:>9} "
+                  f"{report['target']:>7} "
+                  f"{report['copied']:>6} "
+                  f"{report['status']:>10} "
+                  f"{report['human_files']:>6} "
+                  f"{report['nabirds_files']:>8}")
+        
+        total_samples = sum(dataset_stats.values())
+        print("-" * 80)
+        print(f"{'TOTAL':25} {sum(len(files) for files in species_files.values()):>9} "
+              f"{'':>7} {total_samples:>6} {'':>10} {'':>6} {'':>8}")
+        
+        # Summary statistics
+        capped_species = [r for r in balancing_report if r['status'] == 'CAPPED']
+        if capped_species:
+            print(f"\n🔧 Capped species (>{MAX_SAMPLES_PER_SPECIES} samples): {len(capped_species)}")
+            for species_info in capped_species:
+                reduction = species_info['available'] - species_info['copied']
+                print(f"   • {species_info['species'].replace('_', ' ')}: {species_info['available']} → {species_info['copied']} (-{reduction})")
+        
+        print(f"\n📊 Final dataset: {total_samples} samples across {len(dataset_stats)} species")
+        print(f"📈 Average samples per species: {total_samples / len(dataset_stats):.1f}")
         
         return dataset_stats
     
@@ -327,11 +435,17 @@ class EnhancedBirdTrainer:
             'data_sources': ['human_verified', 'nabirds_professional'],
             'optimization_features': [
                 'mixed_data_sources',
+                'dataset_balancing',
                 'aggressive_augmentation', 
                 'learning_rate_scheduling',
                 'early_stopping',
                 'transfer_learning'
-            ]
+            ],
+            'balancing_config': {
+                'max_samples_per_species': 100,
+                'min_samples_per_species': 10,
+                'prioritizes_human_verified': True
+            }
         }
         
         # Save metadata

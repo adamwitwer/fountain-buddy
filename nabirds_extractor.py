@@ -27,7 +27,14 @@ class NABirdsExtractor:
             'Northern Cardinal': {'priority': 4, 'current_samples': 81, 'target_samples': 100},
             'House Sparrow': {'priority': 6, 'current_samples': 60, 'target_samples': 80},
             'Mourning Dove': {'priority': 5, 'current_samples': 59, 'target_samples': 80},
-            'European Starling': {'priority': 2, 'current_samples': 94, 'target_samples': 100}
+            'European Starling': {'priority': 2, 'current_samples': 94, 'target_samples': 100},
+            # Missing species that need NABirds data
+            'White-breasted Nuthatch': {'priority': 11, 'current_samples': 9, 'target_samples': 120},
+            'Tufted Titmouse': {'priority': 11, 'current_samples': 15, 'target_samples': 120},
+            'House Finch': {'priority': 12, 'current_samples': 5, 'target_samples': 120},
+            'Black-capped Chickadee': {'priority': 11, 'current_samples': 4, 'target_samples': 96},
+            'Red-winged Blackbird': {'priority': 12, 'current_samples': 1, 'target_samples': 120},
+            'Song Sparrow': {'priority': 12, 'current_samples': 1, 'target_samples': 120}
         }
         
         # NABirds class mappings (from our earlier analysis)
@@ -39,7 +46,14 @@ class NABirdsExtractor:
             'House Sparrow': [445, 796, 1003],  # House Sparrow variants
             'Common Grackle': [429, 912],  # Common Grackle variants
             'Gray Catbird': [275, 851],  # Gray Catbird variants
-            'Mourning Dove': [171, 529]  # Mourning Dove variants
+            'Mourning Dove': [171, 529],  # Mourning Dove variants
+            # Missing species mappings
+            'White-breasted Nuthatch': [413, 824],  # White-breasted Nuthatch variants
+            'Tufted Titmouse': [717, 819],  # Tufted Titmouse variants
+            'House Finch': [419, 790, 997],  # House Finch (all, male, female)
+            'Black-capped Chickadee': [278, 812],  # Black-capped Chickadee variants
+            'Red-winged Blackbird': [268, 780, 987],  # Red-winged Blackbird (all, male, female)
+            'Song Sparrow': [686, 902]  # Song Sparrow variants
         }
         
         os.makedirs(self.output_dir, exist_ok=True)
