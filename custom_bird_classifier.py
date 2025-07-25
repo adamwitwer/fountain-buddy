@@ -14,12 +14,18 @@ import cv2
 
 class CustomBirdClassifier:
     def __init__(self, model_path=None, metadata_path=None):
-        # Try unified model first, fall back to original
+        # Try enhanced model first, then unified, then fall back to original
         if model_path is None:
+            enhanced_model = 'models/enhanced_bird_classifier.h5'
+            enhanced_metadata = 'models/enhanced_model_metadata.json'
             unified_model = 'models/fountain_buddy_unified_classifier.h5'
             unified_metadata = 'models/unified_model_metadata.json'
             
-            if os.path.exists(unified_model) and os.path.exists(unified_metadata):
+            if os.path.exists(enhanced_model) and os.path.exists(enhanced_metadata):
+                self.model_path = enhanced_model
+                self.metadata_path = enhanced_metadata
+                self.model_version = "enhanced"
+            elif os.path.exists(unified_model) and os.path.exists(unified_metadata):
                 self.model_path = unified_model
                 self.metadata_path = unified_metadata
                 self.model_version = "unified"
