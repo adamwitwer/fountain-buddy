@@ -104,9 +104,9 @@ class AutoRetrainer:
         try:
             self.logger.info("Starting model retraining...")
             
-            # Run the training script
+            # Run the enhanced training script
             result = subprocess.run(
-                ['./venv/bin/python', 'bird_trainer.py'],
+                ['./venv/bin/python', 'bird_trainer_enhanced.py'],
                 capture_output=True,
                 text=True,
                 timeout=3600  # 1 hour timeout
