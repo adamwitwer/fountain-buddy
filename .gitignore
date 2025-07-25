@@ -188,3 +188,5 @@ training_data_unified/
 training_log.json
 models/nabirds_training_data/
 training_data_unified/
+nabirds/
+nabirds_training_data/

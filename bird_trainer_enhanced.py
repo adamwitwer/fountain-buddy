@@ -360,10 +360,15 @@ class EnhancedBirdTrainer:
         # Classification report
         print("\nClassification Report:")
         print("-" * 60)
+        # Get unique classes present in validation set
+        unique_classes = sorted(set(true_classes))
+        present_class_names = [class_labels[i] for i in unique_classes]
+        
         report = classification_report(
             true_classes, 
             predicted_classes, 
-            target_names=class_labels,
+            target_names=present_class_names,
+            labels=unique_classes,
             digits=3
         )
         print(report)

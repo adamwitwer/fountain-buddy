@@ -1,19 +1,26 @@
 {
   "class_names": [
     "American Robin",
+    "Black-capped Chickadee",
     "Blue Jay",
     "Catbird",
     "Common Grackle",
+    "Downy Woodpecker",
     "European Starling",
     "Gray Catbird",
+    "Hairy Woodpecker",
     "House Finch",
     "House Sparrow",
     "Mourning Dove",
     "Northern Cardinal",
+    "Red-bellied Woodpecker",
+    "Red-winged Blackbird",
     "Song Sparrow",
-    "Squirrel"
+    "Squirrel",
+    "Tufted Titmouse",
+    "White-breasted Nuthatch"
   ],
-  "num_classes": 12,
-  "trained_on": "2025-07-08T08:47:00.000000",
-  "training_samples": 464
+  "num_classes": 19,
+  "trained_on": "2025-07-23T23:37:58.801170",
+  "training_samples": 1401
 }
