@@ -413,7 +413,7 @@ class EnhancedBirdTrainer:
         """Save the trained model and comprehensive metadata"""
         
         # Save the model
-        model_path = os.path.join(self.model_dir, 'enhanced_bird_classifier.h5')
+        model_path = os.path.join(self.model_dir, 'enhanced_bird_classifier.keras')
         self.model.save(model_path)
         
         # Create comprehensive metadata
