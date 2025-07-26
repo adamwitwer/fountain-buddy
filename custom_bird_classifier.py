@@ -16,13 +16,18 @@ class CustomBirdClassifier:
     def __init__(self, model_path=None, metadata_path=None):
         # Try enhanced model first, then unified, then fall back to original
         if model_path is None:
-            enhanced_model = 'models/enhanced_bird_classifier.h5'
+            enhanced_model_keras = 'models/enhanced_bird_classifier.keras'
+            enhanced_model_h5 = 'models/enhanced_bird_classifier.h5'
             enhanced_metadata = 'models/enhanced_model_metadata.json'
             unified_model = 'models/fountain_buddy_unified_classifier.h5'
             unified_metadata = 'models/unified_model_metadata.json'
             
-            if os.path.exists(enhanced_model) and os.path.exists(enhanced_metadata):
-                self.model_path = enhanced_model
+            if os.path.exists(enhanced_model_keras) and os.path.exists(enhanced_metadata):
+                self.model_path = enhanced_model_keras
+                self.metadata_path = enhanced_metadata
+                self.model_version = "enhanced"
+            elif os.path.exists(enhanced_model_h5) and os.path.exists(enhanced_metadata):
+                self.model_path = enhanced_model_h5
                 self.metadata_path = enhanced_metadata
                 self.model_version = "enhanced"
             elif os.path.exists(unified_model) and os.path.exists(unified_metadata):
