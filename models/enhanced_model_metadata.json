@@ -1,5 +1,5 @@
 {
-  "model_path": "models/enhanced_bird_classifier.h5",
+  "model_path": "models/enhanced_bird_classifier.keras",
   "class_names": [
     "American Robin",
     "Black-capped Chickadee",
@@ -63,8 +63,8 @@
     "transfer_learning"
   ],
   "balancing_config": {
-    "max_samples_per_species": 100,
-    "min_samples_per_species": 10,
+    "max_samples_per_species": 150,
+    "min_samples_per_species": 20,
     "prioritizes_human_verified": true
   }
 }
