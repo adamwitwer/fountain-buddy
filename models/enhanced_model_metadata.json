@@ -23,31 +23,31 @@
     224,
     224
   ],
-  "training_date": "2025-07-25T18:21:42.427487",
+  "training_date": "2025-07-26T20:03:51.877222",
   "dataset_stats": {
-    "Downy_Woodpecker": 50,
+    "Downy_Woodpecker": 55,
     "Black-capped_Chickadee": 96,
-    "Common_Grackle": 104,
     "Blue_Jay": 108,
-    "Tufted_Titmouse": 120,
+    "Common_Grackle": 109,
     "White-breasted_Nuthatch": 120,
     "Red-winged_Blackbird": 120,
     "House_Finch": 120,
     "Song_Sparrow": 120,
-    "Red-bellied_Woodpecker": 126,
+    "Tufted_Titmouse": 126,
+    "Red-bellied_Woodpecker": 142,
     "American_Robin": 150,
     "Gray_Catbird": 150,
-    "Mourning_Dove": 150,
-    "House_Sparrow": 150,
     "Northern_Cardinal": 150,
+    "House_Sparrow": 150,
+    "Mourning_Dove": 150,
     "European_Starling": 150
   },
-  "total_training_samples": 1984,
+  "total_training_samples": 2016,
   "training_history": {
-    "final_accuracy": 0.3027060925960541,
-    "final_val_accuracy": 0.24810126423835754,
-    "best_val_accuracy": 0.26582279801368713,
-    "epochs_completed": 16
+    "final_accuracy": 0.3356037139892578,
+    "final_val_accuracy": 0.2643391489982605,
+    "best_val_accuracy": 0.2892768085002899,
+    "epochs_completed": 27
   },
   "model_architecture": "ResNet50 + Custom Head",
   "data_sources": [
@@ -63,8 +63,8 @@
     "transfer_learning"
   ],
   "balancing_config": {
-    "max_samples_per_species": 150,
-    "min_samples_per_species": 20,
+    "max_samples_per_species": 100,
+    "min_samples_per_species": 10,
     "prioritizes_human_verified": true
   }
 }

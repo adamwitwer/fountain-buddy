@@ -180,6 +180,7 @@ bird_images/
 *.png
 *.pt
 *.h5
+*.keras
 yolov8*.pt
 discord_bot.log
 nohup.out

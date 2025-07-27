@@ -365,7 +365,7 @@ class EnhancedBirdTrainer:
             
             # Model checkpointing
             ModelCheckpoint(
-                os.path.join(self.model_dir, 'best_enhanced_bird_model.h5'),
+                os.path.join(self.model_dir, 'best_enhanced_bird_model.keras'),
                 monitor='val_accuracy',
                 save_best_only=True,
                 verbose=1
