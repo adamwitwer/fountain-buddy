@@ -4,6 +4,28 @@ Enhanced Bird Species Trainer with NABirds Integration
 Combines human-verified local data with NABirds professional images for better training
 """
 
+# Python 3.12 compatibility fix - must be imported before TensorFlow
+try:
+    import distutils
+except ImportError:
+    import sys
+    import importlib.util
+    from unittest.mock import MagicMock
+    
+    # Create minimal distutils replacement for TensorFlow
+    distutils_spec = importlib.util.spec_from_loader("distutils", loader=None)
+    distutils_module = importlib.util.module_from_spec(distutils_spec)
+    distutils_module.version = MagicMock()
+    distutils_module.spawn = MagicMock()
+    distutils_module.util = MagicMock()
+    
+    sys.modules["distutils"] = distutils_module
+    sys.modules["distutils.version"] = distutils_module.version
+    sys.modules["distutils.spawn"] = distutils_module.spawn
+    sys.modules["distutils.util"] = distutils_module.util
+    
+    print("✅ Applied distutils compatibility fix for Python 3.12")
+
 import os
 import sqlite3
 import numpy as np
@@ -24,6 +46,7 @@ import json
 from pathlib import Path
 import glob
 from collections import Counter
+import random
 
 class EnhancedBirdTrainer:
     def __init__(self, db_path='fountain_buddy.db', images_dir='bird_images', 
@@ -155,7 +178,6 @@ class EnhancedBirdTrainer:
             if len(selected_files) < target_count:
                 remaining_needed = target_count - len(selected_files)
                 # Randomly select from NABirds files
-                import random
                 random.seed(42)  # For reproducibility
                 nabirds_sample = random.sample(nabirds_files, min(remaining_needed, len(nabirds_files)))
                 selected_files.extend(nabirds_sample)
