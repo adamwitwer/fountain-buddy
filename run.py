@@ -27,6 +27,7 @@ import sqlite3
 import smtplib
 import random
 import string
+import shutil
 import numpy as np # Often used with cv2 for image manipulation
 import cv2
 from dotenv import load_dotenv
@@ -181,6 +182,7 @@ def send_bird_to_discord(image_path, camera_manager, yolo_confidence, ai_species
         message_lines.extend([
             "",
             "**Or reply with the species name for others**",
+            "**🗑️ Type 'skip' or 'poor quality' to archive without classification**",
             f"📁 File: `{os.path.basename(image_path)}`",
             f"📍 Location: {location_name}"
         ])
@@ -200,6 +202,49 @@ def send_bird_to_discord(image_path, camera_manager, yolo_confidence, ai_species
     except Exception as e:
         print(f"❌ Failed to send to Discord ({camera_manager.location}): {e}")
 
+def handle_skip_poor_quality(db_record, filename):
+    """Handle skip/poor quality responses by archiving the image."""
+    try:
+        record_id, image_path, old_species = db_record
+        
+        if image_path and os.path.exists(image_path):
+            # Create poor_quality archive directory
+            poor_quality_dir = os.path.join(IMAGE_DIR, "archive", "poor_quality")
+            os.makedirs(poor_quality_dir, exist_ok=True)
+            
+            # Move image to poor quality archive
+            archive_path = os.path.join(poor_quality_dir, os.path.basename(image_path))
+            
+            # Handle duplicate filenames
+            counter = 1
+            base_name, ext = os.path.splitext(os.path.basename(image_path))
+            while os.path.exists(archive_path):
+                archive_path = os.path.join(poor_quality_dir, f"{base_name}_{counter}{ext}")
+                counter += 1
+            
+            shutil.move(image_path, archive_path)
+            
+            # Update database with skip status and new path
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE bird_visits 
+                SET species = ?, confidence = ?, image_path = ? 
+                WHERE id = ?
+            """, ("Poor Quality - Skipped", 0.0, archive_path, record_id))
+            conn.commit()
+            conn.close()
+            
+            print(f"🗑️ Archived poor quality image: {filename} → poor_quality/")
+            return {"success": True, "action": "archived", "reason": "poor_quality"}
+        else:
+            print(f"❌ Image file not found: {image_path}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error handling skip request: {e}")
+        return False
+
 def update_bird_species_from_human(filename, human_species, human_confidence=1.0):
     """Update bird species in database based on human identification."""
     
@@ -218,6 +263,10 @@ def update_bird_species_from_human(filename, human_species, human_confidence=1.0
         if not result:
             print(f"❌ No database record found for {filename}")
             return False
+        
+        # Handle skip/poor quality responses
+        if human_species == "SKIP_POOR_QUALITY":
+            return handle_skip_poor_quality(result, filename)
         
         record_id, old_image_path, old_species = result
         
@@ -333,7 +382,12 @@ def rename_image_with_species(old_path, species_name):
 def parse_human_response(message_content):
     """Parse human response to extract species identification."""
     
-    content = message_content.strip()
+    content = message_content.strip().lower()
+    
+    # Check for skip/poor quality responses
+    skip_keywords = ['skip', 'poor quality', 'poor', 'quality', 'bad', 'blurry', 'unclear']
+    if any(keyword in content for keyword in skip_keywords):
+        return "SKIP_POOR_QUALITY"
     
     # Check if it's a numbered response
     if content.isdigit():
@@ -640,21 +694,18 @@ def original_classify_bird_species(image_crop):
         print(f"Error in bird species classification: {e}")
         return None, 0
 
-def classify_bird_species(image_crop):
-    """Classify bird species using custom model (ImageNet disabled)"""
+def classify_bird_species(image_crop, camera_location='fountain'):
+    """Classify bird species using custom model with location filtering"""
     try:
         if custom_classifier.is_loaded:
-            result = custom_classifier.predict(image_crop)
-            print(f"Custom classifier: {result['species']} ({result['confidence']:.2f})")
-            if result['confidence'] > 0.15:  # Lower threshold for custom model
-                return result['species'], result['confidence']
-            else:
-                print(f"Low confidence ({result['confidence']:.2f}), marking as Unknown Bird")
-                return "Unknown Bird", result['confidence']
+            # Use location-aware prediction
+            species_name, confidence = custom_classifier.predict_for_location(image_crop, camera_location)
+            print(f"Custom classifier ({camera_location}): {species_name} ({confidence:.2f})")
+            return species_name, confidence
     except Exception as e:
         print(f"Custom classifier error: {e}")
     
-    # No ImageNet fallback - return Unknown Bird
+    # No model available - return Unknown Bird
     return "Unknown Bird", 0.0
 
 def is_bird_species(label):
@@ -732,7 +783,7 @@ def process_bird_detection(camera_manager):
                     try:
                         # Use the largest bird crop for species classification
                         largest_crop = max(bird_crops, key=lambda crop: crop.shape[0] * crop.shape[1])
-                        species_name, species_confidence = classify_bird_species(largest_crop)
+                        species_name, species_confidence = classify_bird_species(largest_crop, camera_manager.location)
                         if species_name:
                             print(f"🤖 Species identified: {species_name} (confidence: {species_confidence:.2f})")
                     except Exception as e:
