@@ -4,6 +4,25 @@ Custom Bird Classifier Integration
 Replaces the generic ResNet-50 ImageNet classifier with a fine-tuned model
 """
 
+# Python 3.12 compatibility fix
+try:
+    import distutils
+except ImportError:
+    import sys
+    import importlib.util
+    from unittest.mock import MagicMock
+    
+    distutils_spec = importlib.util.spec_from_loader("distutils", loader=None)
+    distutils_module = importlib.util.module_from_spec(distutils_spec)
+    distutils_module.version = MagicMock()
+    distutils_module.spawn = MagicMock()
+    distutils_module.util = MagicMock()
+    
+    sys.modules["distutils"] = distutils_module
+    sys.modules["distutils.version"] = distutils_module.version
+    sys.modules["distutils.spawn"] = distutils_module.spawn
+    sys.modules["distutils.util"] = distutils_module.util
+
 import os
 import json
 import numpy as np
@@ -14,15 +33,27 @@ import cv2
 
 class CustomBirdClassifier:
     def __init__(self, model_path=None, metadata_path=None):
-        # Try enhanced model first, then unified, then fall back to original
+        # Try enhanced CNN first (clean + human corrections), then clean optimized, then legacy models
         if model_path is None:
+            enhanced_cnn_model = 'models/enhanced_nabirds_cnn.keras'
+            enhanced_cnn_metadata = 'models/enhanced_nabirds_cnn_metadata.json'
+            clean_model = 'models/clean_nabirds_optimized_cnn.keras'
+            clean_metadata = 'models/clean_nabirds_optimized_cnn_metadata.json'
             enhanced_model_keras = 'models/enhanced_bird_classifier.keras'
             enhanced_model_h5 = 'models/enhanced_bird_classifier.h5'
             enhanced_metadata = 'models/enhanced_model_metadata.json'
             unified_model = 'models/fountain_buddy_unified_classifier.h5'
             unified_metadata = 'models/unified_model_metadata.json'
             
-            if os.path.exists(enhanced_model_keras) and os.path.exists(enhanced_metadata):
+            if os.path.exists(enhanced_cnn_model) and os.path.exists(enhanced_cnn_metadata):
+                self.model_path = enhanced_cnn_model
+                self.metadata_path = enhanced_cnn_metadata
+                self.model_version = "enhanced_cnn"
+            elif os.path.exists(clean_model) and os.path.exists(clean_metadata):
+                self.model_path = clean_model
+                self.metadata_path = clean_metadata
+                self.model_version = "clean_optimized"
+            elif os.path.exists(enhanced_model_keras) and os.path.exists(enhanced_metadata):
                 self.model_path = enhanced_model_keras
                 self.metadata_path = enhanced_metadata
                 self.model_version = "enhanced"
@@ -147,6 +178,46 @@ class CustomBirdClassifier:
             
         except Exception as e:
             print(f"Error in custom classifier: {e}")
+            return "Unknown Bird", 0.0
+    
+    def predict_for_location(self, image, location='fountain'):
+        """Predict bird species filtered by camera location"""
+        try:
+            if not self.is_loaded:
+                return "Unknown Bird", 0.0
+            
+            # Get all predictions from unified model
+            result = self.predict(image)
+            
+            # Location-specific species lists (matches Discord bot)
+            FOUNTAIN_SPECIES = {
+                "Northern Cardinal", "American Robin", "Common Grackle", 
+                "Blue Jay", "Mourning Dove", "House Sparrow", "Gray Catbird",
+                "House Finch", "Song Sparrow", "European Starling"
+            }
+            
+            PEANUT_SPECIES = {
+                "Red-bellied Woodpecker", "Black-capped Chickadee", "Northern Flicker",
+                "White-breasted Nuthatch", "Tufted Titmouse", "Carolina Wren", 
+                "European Starling", "Downy Woodpecker", "Hairy Woodpecker"
+            }
+            
+            location_species = FOUNTAIN_SPECIES if location == 'fountain' else PEANUT_SPECIES
+            
+            # Check if top prediction is valid for this location
+            if result['species'] in location_species:
+                return result['species'], result['confidence']
+            
+            # Check top 3 predictions for location-appropriate species
+            for species, confidence in result['top_3']:
+                if species in location_species and confidence > 0.10:
+                    return species, confidence
+            
+            # No location-appropriate prediction found
+            return "Unknown Bird", result['confidence']
+            
+        except Exception as e:
+            print(f"Error in location-specific classifier: {e}")
             return "Unknown Bird", 0.0
 
 def integrate_with_main_app():

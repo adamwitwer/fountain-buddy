@@ -1,0 +1,25 @@
+{
+  "extraction_date": "/Users/adam/Documents/Projects/fountain-buddy",
+  "total_images": 1596,
+  "total_species": 16,
+  "max_per_species": 100,
+  "min_per_species": 20,
+  "species_stats": {
+    "American_Robin": 100,
+    "Black-capped_Chickadee": 96,
+    "Blue_Jay": 100,
+    "Common_Grackle": 100,
+    "Downy_Woodpecker": 100,
+    "European_Starling": 100,
+    "Gray_Catbird": 100,
+    "House_Finch": 100,
+    "House_Sparrow": 100,
+    "Mourning_Dove": 100,
+    "Northern_Cardinal": 100,
+    "Red-bellied_Woodpecker": 100,
+    "Red-winged_Blackbird": 100,
+    "Song_Sparrow": 100,
+    "Tufted_Titmouse": 100,
+    "White-breasted_Nuthatch": 100
+  }
+}
