@@ -15,12 +15,12 @@
 - **`run.py`** - 📹 Camera monitoring service (bird detection, AI classification, Discord alerts)
 - **`discord_bot.py`** - 💬 Discord response service (human feedback processing, database updates)
 
-### 🧠 AI Training System (Apple Silicon Optimized)
-- **`bird_trainer_enhanced.py`** - 🚀 **M4 Pro optimized training with NABirds integration (15-minute training)**
-- **`nabirds_extractor.py`** - 🎯 **Professional dataset extraction tool for balanced training**
-- **`auto_retrain.py`** - Automated retraining trigger (uses enhanced pipeline)
-- **`custom_bird_classifier.py`** - Enhanced classifier with automatic model selection
-- **`training_improvements_summary.py`** - 🆕 **Training performance tracking and analysis**
+### 🧠 Custom CNN Training System (Apple Silicon Optimized) 
+- **`train_clean_optimized_cnn.py`** - 🎯 **Working custom CNN trainer (64.6% accuracy breakthrough)**
+- **`bird_trainer_enhanced_cnn.py`** - 🚀 **Production trainer with Discord corrections integration**
+- **`nabirds_clean_extractor.py`** - 🎯 **Professional dataset extraction (1,596 balanced images)**
+- **`auto_retrain.py`** - Automated retraining trigger (uses custom CNN approach)
+- **`custom_bird_classifier.py`** - Enhanced classifier with automatic clean model selection
 
 ### 📱 Mac Service Management (macOS launchd)
 - **`service-install-all.sh`** - Install both services as background daemons
@@ -46,8 +46,8 @@
   - **`fountain/`** - Fountain camera captures
   - **`peanut/`** - Peanut feeder camera captures
   - **`archive/`** - Archived images
-- **`training_data_unified/`** - 🚀 **Unified training structure (human + NABirds data)**
-- **`nabirds_training_data/`** - 🎯 **Professional NABirds images (265+ samples, balanced)**
+- **`nabirds_clean_training/`** - 🎯 **Clean NABirds foundation (1,596 balanced images, 96-100 per species)**
+- **`training_data_enhanced_cnn/`** - 🚀 **Enhanced training data (clean foundation + Discord corrections)**
 - **`models/`** - Trained AI models (M4 Pro enhanced models prioritized)
 - **`logs/`** - Service logs (camera, Discord bot, errors)
 - **`fountain_buddy.db`** - SQLite database with bird visit records
