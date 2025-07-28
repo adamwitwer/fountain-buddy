@@ -191,3 +191,9 @@ models/nabirds_training_data/
 training_data_unified/
 nabirds/
 nabirds_training_data/
+
+# macOS launchd service files (system-specific)
+*.plist
+
+# Cleanup and utility scripts
+cleanup_repo.sh

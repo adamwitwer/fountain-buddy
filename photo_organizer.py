@@ -108,14 +108,28 @@ class PhotoOrganizer:
         moved_count = 0
         skipped_count = 0
         
+        # Collect all image paths to process
+        image_paths_to_process = []
+        
         # Process all photos in the main bird_images directory
         for image_path in self.bird_images_dir.iterdir():
-            if not image_path.is_file() or not image_path.suffix.lower() in ['.jpg', '.jpeg', '.png']:
-                continue
-            
-            # Skip if already in organized subdirectories
-            if image_path.parent.name in ['active', 'archive', 'training_candidates']:
-                continue
+            if image_path.is_file() and image_path.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                # Skip if already in organized subdirectories
+                if image_path.parent.name not in ['active', 'archive', 'training_candidates']:
+                    image_paths_to_process.append(image_path)
+        
+        # Also process unclassified photos in fountain/ subdirectory
+        fountain_dir = self.bird_images_dir / "fountain"
+        if fountain_dir.exists():
+            logger.info(f"Processing unclassified photos in fountain/ directory...")
+            for image_path in fountain_dir.iterdir():
+                if image_path.is_file() and image_path.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                    image_paths_to_process.append(image_path)
+        
+        logger.info(f"Found {len(image_paths_to_process)} photos to organize")
+        
+        # Process all collected image paths
+        for image_path in image_paths_to_process:
             
             # Skip if training protected
             if self.is_training_protected(image_path):
