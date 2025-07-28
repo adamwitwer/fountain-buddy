@@ -1,0 +1,44 @@
+{
+  "model_path": "models/clean_nabirds_optimized_cnn.keras",
+  "class_names": [
+    "American Robin",
+    "Black-capped Chickadee",
+    "Blue Jay",
+    "Common Grackle",
+    "Downy Woodpecker",
+    "European Starling",
+    "Gray Catbird",
+    "House Finch",
+    "House Sparrow",
+    "Mourning Dove",
+    "Northern Cardinal",
+    "Red-bellied Woodpecker",
+    "Red-winged Blackbird",
+    "Song Sparrow",
+    "Tufted Titmouse",
+    "White-breasted Nuthatch"
+  ],
+  "num_classes": 16,
+  "image_size": [
+    224,
+    224
+  ],
+  "training_date": "2025-07-28T12:49:09.588673",
+  "data_source": "nabirds_clean_balanced",
+  "total_training_samples": 1277,
+  "total_validation_samples": 319,
+  "training_history": {
+    "final_accuracy": 0.5818324089050293,
+    "final_val_accuracy": 0.6457680463790894,
+    "best_val_accuracy": 0.6457680463790894,
+    "epochs_completed": 150
+  },
+  "model_architecture": "Optimized Custom CNN (from scratch)",
+  "improvements_over_simple": [
+    "higher_resolution_224x224",
+    "deeper_architecture_5_blocks",
+    "global_average_pooling",
+    "aggressive_augmentation",
+    "dropout_regularization"
+  ]
+}
