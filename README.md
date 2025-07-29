@@ -444,10 +444,6 @@ The modular design makes it easy to extend:
 - **Data analysis** - Query SQLite database for location-based insights
 - **Custom locations** - Support any number of camera locations
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 🙏 Acknowledgments
 
 - **YOLO** - Object detection framework
