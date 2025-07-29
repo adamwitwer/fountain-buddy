@@ -3,12 +3,12 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.fountainbuddy.service</string>
+    <string>com.fountainbuddy.discordbot</string>
     
     <key>ProgramArguments</key>
     <array>
         <string>/Users/adam/Documents/Projects/fountain-buddy/venv/bin/python</string>
-        <string>/Users/adam/Documents/Projects/fountain-buddy/run.py</string>
+        <string>/Users/adam/Documents/Projects/fountain-buddy/discord_bot.py</string>
     </array>
     
     <key>WorkingDirectory</key>
@@ -26,10 +26,10 @@
     </dict>
     
     <key>StandardOutPath</key>
-    <string>/Users/adam/Documents/Projects/fountain-buddy/logs/fountain-buddy.log</string>
+    <string>/Users/adam/Documents/Projects/fountain-buddy/logs/discord-bot.log</string>
     
     <key>StandardErrorPath</key>
-    <string>/Users/adam/Documents/Projects/fountain-buddy/logs/fountain-buddy-error.log</string>
+    <string>/Users/adam/Documents/Projects/fountain-buddy/logs/discord-bot-error.log</string>
     
     <key>EnvironmentVariables</key>
     <dict>
@@ -39,11 +39,6 @@
         <string>/Users/adam/Documents/Projects/fountain-buddy</string>
     </dict>
     
-    <key>StartInterval</key>
-    <integer>30</integer>
-    
-    <key>ThrottleInterval</key>
-    <integer>10</integer>
     
     <key>ProcessType</key>
     <string>Background</string>

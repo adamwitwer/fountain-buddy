@@ -98,13 +98,13 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 4. **Install as permanent services**
    ```bash
    # Install both camera monitor + Discord bot as background services
-   ./service-install-all.sh
+   ./services/service-install-all.sh
    
    # Check status
-   ./service-status-all.sh
+   ./services/service-status-all.sh
    
    # View live logs
-   ./service-logs-all.sh
+   ./services/service-logs-all.sh
    ```
 
 ✅ **Services auto-start at login and restart on crashes!**
@@ -119,7 +119,12 @@ For non-Mac systems (performance will be slower):
    cd fountain-buddy
    python3 -m venv venv
    source venv/bin/activate
+   
+   # For Linux/WSL2 - use standard requirements
    pip install -r requirements.txt
+   
+   # For Mac (Apple Silicon) - use optimized requirements
+   pip install -r requirements-mac.txt
    ```
 
 2. **Configure and run**
@@ -128,6 +133,30 @@ For non-Mac systems (performance will be slower):
    # Edit .env with your settings
    python3 run.py --init-db
    ```
+
+## 📦 Requirements & Dependencies
+
+### Platform-Specific Requirements
+
+**🍎 Mac (Apple Silicon) - `requirements-mac.txt`:**
+- **TensorFlow Metal** - GPU acceleration for M1/M2/M3/M4 chips
+- **Optimized versions** - All packages tested for Apple Silicon compatibility
+- **4x faster training** - Leverages unified memory architecture
+- **Recommended** for production deployment
+
+**🐧 Linux/WSL2 - `requirements.txt`:**
+- **Standard TensorFlow** - CPU-only or CUDA GPU support
+- **Broader compatibility** - Works on most Linux distributions
+- **Slower training** - No Metal acceleration
+- **Good for development** or non-Apple hardware
+
+### Key Dependencies
+- **TensorFlow 2.16+** - Deep learning framework
+- **OpenCV** - Computer vision and image processing
+- **Discord.py** - Bot integration for human feedback
+- **Ultralytics** - YOLOv8 object detection
+- **scikit-learn** - Data preprocessing and metrics
+- **APScheduler** - Automated task scheduling
 
 ## ⚙️ Configuration
 
@@ -289,16 +318,16 @@ The system features a revolutionary training approach optimized for Apple Silico
 - **`auto_retrain.py`** - Automated retraining trigger system
 
 #### 📱 **Service Management (macOS)**
-- **`service-install-all.sh`** - Install both services as background daemons
-- **`service-status-all.sh`** - Check status of both services
-- **`service-start-all.sh`** / **`service-stop-all.sh`** - Control services
-- **`service-logs-all.sh`** - View logs from both services
-- **`service-uninstall-all.sh`** - Remove services completely
+- **`services/service-install-all.sh`** - Install both services as background daemons
+- **`services/service-status-all.sh`** - Check status of both services
+- **`services/service-start-all.sh`** / **`services/service-stop-all.sh`** - Control services
+- **`services/service-logs-all.sh`** - View logs from both services
+- **`services/service-uninstall-all.sh`** - Remove services completely
 
 #### 🛠 **Setup and Compatibility**
 - **`setup-mac-py312.sh`** - One-command Mac setup with Apple Silicon optimization
 - **`check_compatibility.py`** - System compatibility verification
-- **`requirements-mac.txt`** - Mac-optimized dependencies
+- **`requirements-mac.txt`** - Mac-optimized dependencies with TensorFlow Metal support
 - **`README-SERVICE.md`** - Complete service management guide
 
 #### 🔧 **Core Infrastructure**
@@ -363,15 +392,16 @@ fountain-buddy/
 │   └── fix_distutils.py             # Python 3.12 compatibility
 │
 ├── 📱 SERVICE MANAGEMENT (macOS launchd)
-│   ├── service-install-all.sh        # Install both services
-│   ├── service-status-all.sh         # Check service status
-│   ├── service-start-all.sh          # Start services
-│   ├── service-stop-all.sh           # Stop services
-│   ├── service-logs-all.sh           # View service logs
-│   ├── service-uninstall-all.sh      # Remove services
-│   ├── com.fountainbuddy.service.plist     # Camera service config
-│   ├── com.fountainbuddy.discordbot.plist  # Discord service config
-│   └── README-SERVICE.md             # Service documentation
+│   └── services/                     # Service management directory
+│       ├── service-install-all.sh    # Install both services
+│       ├── service-status-all.sh     # Check service status
+│       ├── service-start-all.sh      # Start services
+│       ├── service-stop-all.sh       # Stop services
+│       ├── service-logs-all.sh       # View service logs
+│       ├── service-uninstall-all.sh  # Remove services
+│       ├── com.fountainbuddy.service.plist     # Camera service config
+│       ├── com.fountainbuddy.discordbot.plist  # Discord service config
+│       └── README-SERVICE.md         # Service documentation
 │
 ├── 🧠 AI TRAINING (Apple Silicon accelerated)
 │   ├── bird_trainer_enhanced.py      # 🚀 M4 Pro optimized training

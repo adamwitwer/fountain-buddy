@@ -27,4 +27,4 @@ echo "✅ Services started!"
 echo ""
 
 # Show status
-./service-status-all.sh
+./services/service-status-all.sh

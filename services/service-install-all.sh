@@ -17,13 +17,13 @@ mkdir -p "$LAUNCHD_DIR"
 
 # Install main service
 echo "📹 Installing camera monitoring service..."
-cp "$PROJECT_DIR/com.fountainbuddy.service.plist" "$LAUNCHD_DIR/"
+cp "$PROJECT_DIR/services/com.fountainbuddy.service.plist" "$LAUNCHD_DIR/"
 launchctl load "$LAUNCHD_DIR/com.fountainbuddy.service.plist"
 launchctl enable "gui/$(id -u)/$MAIN_SERVICE"
 
 # Install Discord bot service  
 echo "💬 Installing Discord bot service..."
-cp "$PROJECT_DIR/com.fountainbuddy.discordbot.plist" "$LAUNCHD_DIR/"
+cp "$PROJECT_DIR/services/com.fountainbuddy.discordbot.plist" "$LAUNCHD_DIR/"
 launchctl load "$LAUNCHD_DIR/com.fountainbuddy.discordbot.plist"
 launchctl enable "gui/$(id -u)/$BOT_SERVICE"
 

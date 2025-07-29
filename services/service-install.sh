@@ -15,7 +15,7 @@ mkdir -p "$LAUNCHD_DIR"
 
 # Copy plist file to LaunchAgents
 echo "📋 Installing service configuration..."
-cp "$PROJECT_DIR/$PLIST_FILE" "$LAUNCHD_DIR/"
+cp "$PROJECT_DIR/services/$PLIST_FILE" "$LAUNCHD_DIR/"
 
 # Load the service
 echo "🚀 Loading service..."
