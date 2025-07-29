@@ -268,7 +268,8 @@ def create_camera_managers() -> Dict[str, CameraManager]:
         7: "Gray Catbird",
         8: "House Finch",
         9: "Song Sparrow",
-        10: "European Starling"
+        10: "European Starling",
+        11: "Carolina Wren"
     }
     
     PEANUT_BIRDS = {
@@ -280,7 +281,9 @@ def create_camera_managers() -> Dict[str, CameraManager]:
         6: "Carolina Wren",
         7: "European Starling",
         8: "Downy Woodpecker",
-        9: "Hairy Woodpecker"
+        9: "Hairy Woodpecker",
+        10: "House Sparrow",
+        11: "Gray Catbird"
     }
     
     cameras = {}
