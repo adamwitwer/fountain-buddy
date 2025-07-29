@@ -109,7 +109,7 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 
 ✅ **Services auto-start at login and restart on crashes!**
 
-### 🐧 **Alternative: Linux/WSL2 Setup** 
+### 🐧 **Alternative: Linux Setup** 
 
 For non-Mac systems (performance will be slower):
 
@@ -120,7 +120,7 @@ For non-Mac systems (performance will be slower):
    python3 -m venv venv
    source venv/bin/activate
    
-   # For Linux/WSL2 - use standard requirements
+   # For Linux - use standard requirements
    pip install -r requirements.txt
    
    # For Mac (Apple Silicon) - use optimized requirements
@@ -144,7 +144,7 @@ For non-Mac systems (performance will be slower):
 - **4x faster training** - Leverages unified memory architecture
 - **Recommended** for production deployment
 
-**🐧 Linux/WSL2 - `requirements.txt`:**
+**🐧 Linux - `requirements.txt`:**
 - **Standard TensorFlow** - CPU-only or CUDA GPU support
 - **Broader compatibility** - Works on most Linux distributions
 - **Slower training** - No Metal acceleration
@@ -294,13 +294,6 @@ The system features a revolutionary training approach optimized for Apple Silico
 - **Cross-location learning** - Data from multiple cameras improves accuracy
 - **Quality control** - Only human-verified data used for continuous improvement
 - **Training logs** track model improvements over time with detailed metrics
-
-#### 📊 **Performance Comparison**
-| Platform | Training Time | GPU Support | Service Management |
-|----------|---------------|-------------|-------------------|
-| **Mac M4 Pro** | **15 minutes** | ✅ Metal | ✅ Native launchd |
-| WSL2/Linux | 2+ hours | ⚠️ Limited | 🔧 Manual setup |
-| Windows | 2+ hours | ⚠️ Complex | 🔧 Manual setup |
 
 ## 🏗️ Architecture
 
