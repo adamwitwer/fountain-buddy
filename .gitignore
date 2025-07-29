@@ -192,8 +192,10 @@ training_data_unified/
 nabirds/
 nabirds_training_data/
 
-# macOS launchd service files (system-specific)
-*.plist
+# Training data directories (large datasets)
+nabirds_clean_training/
+training_data_fountain/
+training_data_peanut/
 
 # Cleanup and utility scripts
 cleanup_repo.sh
