@@ -38,22 +38,11 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 - **Apple Silicon optimized** - Custom training pipeline leverages M4 Pro Metal acceleration
 - **Automated retraining** - Nightly improvements using clean base + human corrections
 
-### 🔄 Complete Workflow
-1. **Bird visits location** → Motion/AI detection triggers at fountain, peanut feeder, etc.
-2. **YOLO identifies bird** → Crops bird region from image
-3. **Custom CNN classification** → Clean 16-class model predicts species with 64.6% accuracy
-4. **Location-aware Discord notification** → Image + AI prediction + location-specific species options
-5. **Human verification** → Reply "3" for Blue Jay or type species name
-6. **Automatic updates** → Database and filename updated with correct species and location
-7. **Cross-location training** → AI model retrains nightly at 11:00 PM using data from all cameras
-8. **Daily reporting** → Email summary with accurate species data by location
 
 ## 🚀 Installation
 
-### 🎯 **Recommended: Mac M4 Pro Setup (Fastest)**
-
-#### Prerequisites
-- **macOS 15.5+** with Apple Silicon (M1/M2/M3/M4)
+### Prerequisites
+- **macOS 15.5+** with Apple Silicon (M1/M2/M3/M4) - *recommended for 4x faster training*
 - **Python 3.12** (via Homebrew)
 - **Xcode Command Line Tools**: `xcode-select --install`
 - **Homebrew**: [Install here](https://brew.sh)
@@ -61,7 +50,7 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 - Discord server and bot token
 - Email account (Gmail recommended)
 
-#### Quick Setup
+### Quick Setup
 
 1. **Clone and setup**
    ```bash
@@ -71,8 +60,14 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
    # Check compatibility
    python3 check_compatibility.py
    
-   # One-command setup (uses Python 3.12 + Apple Silicon optimization)
+   # One-command setup (Mac with Apple Silicon optimization)
    ./setup-mac-py312.sh
+   
+   # Alternative: Manual setup for Linux/other systems
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements-mac.txt  # Mac
+   pip install -r requirements.txt      # Linux
    ```
 
 2. **Configure environment**
@@ -91,7 +86,7 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
    python discord_bot.py   # Terminal 2: Discord responses
    ```
 
-4. **Install as permanent services**
+4. **Install as permanent services (macOS)**
    ```bash
    # Install both camera monitor + Discord bot as background services
    ./services/service-install-all.sh
@@ -105,49 +100,8 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 
 ✅ **Services auto-start at login and restart on crashes!**
 
-### 🐧 **Alternative: Linux Setup** 
-
-For non-Mac systems:
-
-1. **Standard setup**
-   ```bash
-   git clone https://github.com/yourusername/fountain-buddy.git
-   cd fountain-buddy
-   python3 -m venv venv
-   source venv/bin/activate
-   
-   # For Linux - use standard requirements
-   pip install -r requirements.txt
-   
-   # For Mac (Apple Silicon) - use optimized requirements
-   pip install -r requirements-mac.txt
-   ```
-
-2. **Configure and run**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your settings
-   python3 run.py --init-db
-   ```
-
-## 📦 Requirements & Dependencies
-
-### Platform-Specific Requirements
-
-**🍎 Mac (Apple Silicon) - `requirements-mac.txt`:**
-- **TensorFlow Metal** - GPU acceleration for M1/M2/M3/M4 chips
-- **Optimized versions** - All packages tested for Apple Silicon compatibility
-- **4x faster training** - Leverages unified memory architecture
-- **Recommended** for production deployment
-
-**🐧 Linux - `requirements.txt`:**
-- **Standard TensorFlow** - CPU-only or CUDA GPU support
-- **Broader compatibility** - Works on most Linux distributions
-- **Slower training** - No Metal acceleration
-- **Good for development** or non-Apple hardware
-
-### Key Dependencies
-- **TensorFlow 2.16+** - Deep learning framework
+## 📦 Key Dependencies
+- **TensorFlow 2.16+** - Deep learning framework (Metal GPU acceleration on Apple Silicon)
 - **OpenCV** - Computer vision and image processing
 - **Discord.py** - Bot integration for human feedback
 - **Ultralytics** - YOLOv8 object detection
@@ -217,41 +171,13 @@ DISCORD_CHANNEL_PEANUT_ID=peanut_channel_id
 
 ## 📱 Usage
 
-### Bird Identification Workflow
+### Workflow
 
-1. **Automatic Detection**
-   - System monitors camera for motion/AI triggers
-   - YOLO detects and crops birds from images
-
-2. **Location-Aware Discord Notification**
-   - Receive message like:
-     ```
-     🐦 New bird at fountain! YOLO confidence: 0.85
-     🤖 AI thinks: Blue Jay (0.73)
-     
-     What species is this? Reply with number:
-     1. Northern Cardinal
-     2. American Robin
-     3. Common Grackle
-     4. Blue Jay
-     5. Mourning Dove
-     ...
-     
-     📍 Location: Fountain
-     ```
-   - Different species options for each camera location
-   - AI prediction uses unified 19-class model for better accuracy
-
-3. **Quick Response**
-   - Reply with number: `4`
-   - Or type species name: `Blue Jay`
-   - Bot confirms: "✅ Thanks! Identified as **Blue Jay** (#4)"
-
-4. **Automatic Updates**
-   - Database updated with your identification and location
-   - Image saved to location folder.
-   - Training data collected for unified AI model improvement
-   - Daily reports by location
+1. **Motion/AI detection** triggers → **YOLO crops bird** → **Custom CNN predicts species**
+2. **Discord notification** with image, AI prediction, and location-specific species options
+3. **Human verification** via numbered reply or species name
+4. **Automatic updates** to database, filename, and training data
+5. **Nightly retraining** (11 PM) and daily email reports
 
 ### Daily Reports
 
@@ -260,30 +186,12 @@ Receive email summaries at 11 PM with:
 - Species breakdown (your accurate data!)
 - Sample images from the day
 
-### Enhanced AI Model Training
-
-The system features a training approach optimized for Apple Silicon performance:
-
-#### 🚀 **Apple Silicon Acceleration**
-- **TensorFlow Metal**: Native GPU acceleration for Apple Silicon
-- **Unified memory**: Efficient data loading and processing
-- **Real-time feedback**: Fast iteration cycle for model improvements
-- **Enhanced data augmentation** - Better generalization through aggressive image transformations
-- **Learning rate scheduling** - Smooth convergence with adaptive learning rates
-- **Early stopping** - Prevents overfitting with intelligent patience mechanisms
-
-#### 🎯 **NABirds Integration**
-- **Professional dataset boost** - 265+ curated NABirds images added for balanced training
-- **Balanced representation** - All backyard species now have 80-120 samples for consistent performance
-- **Hybrid training approach** - Your local expertise + professional reference images = superior accuracy
-
-#### 🔄 **Automated Learning System**
-- **Daily auto-retraining** runs at 11:00 PM when 15+ new identifications collected
-- **Enhanced pipeline integration** - Uses optimized training automatically
-- **Automatic model reload** - Service picks up new model without restart
-- **Cross-location learning** - Data from multiple cameras improves accuracy
-- **Quality control** - Only human-verified data used for continuous improvement
-- **Training logs** track model improvements over time with detailed metrics
+### AI Training Features
+- **Apple Silicon acceleration** - 4x faster training with TensorFlow Metal
+- **NABirds integration** - Professional dataset + your corrections for balanced training
+- **Daily auto-retraining** - Runs at 11 PM when 15+ new identifications collected
+- **Smart Sample Management** - Replaces weak NABirds samples with human corrections
+- **Comprehensive evaluation** - Track accuracy improvements over time
 
 ## 📊 **NEW: Comprehensive Model Evaluation System**
 
@@ -438,30 +346,6 @@ Monitor how your corrections improve dataset quality:
 - **`photo_organizer.py`** - Location-aware photo organization
 - **`training_improvements_summary.py`** - Training performance tracking
 
-### Data Flow
-
-```
-**Multi-Camera Real-time Detection & Verification:**
-Multi-Camera Motion → YOLO Detection → Unified AI Model → Location-Aware Discord Alert
-        ↓                   ↓              ↓                        ↓
-   Location-Tagged → Bird Cropped → 19-Class Prediction → Location-Specific Options
-     Image Saved         ↓              ↓                        ↓  
-   Database Record ← Location Folder ← Verified Species ← Bot Processing
-```
-
-**Daily Automated Improvement (11:00 PM):**
-```
-Multi-Location Corrections → Training Check → Enhanced NABirds Training → Auto Reload
-          ↓                      ↓                    ↓                      ↓
-   (15+ cross-location) → Triggers Training → Professional + Local Data → Superior AI
-                                              ↓
-                                  3-5x Faster Pipeline + Mixed Precision
-```
-
-**Daily Reporting:**
-```
-Database Query → Species Summary → Email Report → Sent at 11:00 PM
-```
 
 ### Database Schema
 
@@ -483,78 +367,51 @@ CREATE TABLE bird_visits (
 ### Project Structure
 ```
 fountain-buddy/
-├── 🚀 SERVICES (Two-process architecture)
-│   ├── run.py                         # 📹 Camera monitoring service
-│   └── discord_bot.py                 # 💬 Discord response service
+├── 🚀 CORE SERVICES
+│   ├── run.py                         # Camera monitoring service
+│   ├── discord_bot.py                 # Discord response service
+│   ├── camera_manager.py              # Multi-camera management
+│   └── photo_organizer.py             # Photo organization
 │
-├── 🛠 MAC SETUP (Apple Silicon optimized)
+├── 🧠 AI TRAINING
+│   ├── bird_trainer_enhanced_cnn.py   # Apple Silicon optimized training
+│   ├── model_evaluation_dashboard.py  # Performance analysis dashboard
+│   ├── nabirds_clean_extractor.py     # NABirds dataset integration
+│   ├── custom_bird_classifier.py      # Enhanced classifier
+│   └── train_clean_optimized_cnn.py   # Base CNN trainer
+│
+├── 📱 SERVICE MANAGEMENT (macOS)
+│   └── services/                      # Service scripts and configs
+│       ├── service-*-all.sh           # Batch service management
+│       ├── service-*.sh               # Individual service control
+│       └── *.plist                    # Service configurations
+│
+├── 🛠 SETUP & CONFIG
 │   ├── setup-mac-py312.sh            # One-command Mac setup
-│   ├── check_compatibility.py        # System verification
 │   ├── requirements-mac.txt          # Mac-optimized dependencies
-│   └── fix_distutils.py             # Python 3.12 compatibility
-│
-├── 📱 SERVICE MANAGEMENT (macOS launchd)
-│   └── services/                     # Service management directory
-│       ├── service-install-all.sh    # Install both services
-│       ├── service-status-all.sh     # Check service status
-│       ├── service-start-all.sh      # Start services
-│       ├── service-stop-all.sh       # Stop services
-│       ├── service-logs-all.sh       # View service logs
-│       ├── service-uninstall-all.sh  # Remove services
-│       ├── com.fountainbuddy.service.plist     # Camera service config
-│       ├── com.fountainbuddy.discordbot.plist  # Discord service config
-│       └── README-SERVICE.md         # Service documentation
-│
-├── 🧠 AI TRAINING (Apple Silicon accelerated)
-│   ├── bird_trainer_enhanced_cnn.py  # 🚀 M4 Pro optimized training with Smart Sample Management
-│   ├── model_evaluation_dashboard.py # 📊 Comprehensive model performance analysis
-│   ├── nabirds_clean_extractor.py    # NABirds dataset integration
-│   ├── custom_bird_classifier.py     # Enhanced classifier
-│   ├── auto_retrain.py               # Automated retraining
-│   └── training_improvements_summary.py # Performance tracking
-│
-├── 🔧 CORE INFRASTRUCTURE
-│   ├── camera_manager.py             # Multi-camera management
-│   ├── species_mapping.py            # Species classification
-│   ├── photo_organizer.py            # Photo organization
-│   └── photo_cleanup_scheduler.py    # Cleanup automation
+│   ├── requirements.txt              # Standard requirements
+│   └── .env.example                  # Configuration template
 │
 ├── 📊 DATA & MODELS
 │   ├── models/                       # Trained AI models
-│   ├── training_data_unified/        # Training images (human + NABirds)
-│   ├── nabirds_training_data/        # Professional reference images
-│   ├── bird_images/                  # Captured bird photos
-│   │   ├── fountain/                 # Fountain camera
-│   │   ├── peanut/                   # Peanut feeder camera
-│   │   └── archive/                  # Archived images
+│   ├── bird_images/active/           # Captured bird photos
+│   ├── training_data_enhanced_cnn/   # Training dataset
+│   ├── nabirds/                      # NABirds reference dataset
 │   ├── logs/                         # Service logs
-│   │   ├── fountain-buddy.log        # Camera service logs
-│   │   ├── discord-bot.log           # Discord service logs
-│   │   └── *-error.log              # Error logs
 │   └── fountain_buddy.db             # SQLite database
 │
-├── 📚 DOCUMENTATION
-│   ├── memory-bank/                  # Project evolution docs
-│   │   ├── project-overview.md       # System overview
-│   │   ├── mac-migration-success.md  # 🆕 Migration results
-│   │   └── performance-improvements.md # 🆕 Benchmarks
-│   ├── requirements.txt              # Legacy requirements
-│   ├── .env.example                  # Configuration template
-│   └── README.md                     # This file
+└── 📚 DOCUMENTATION
+    ├── memory-bank/                  # Project evolution docs
+    ├── README-SERVICE.md             # Service management guide
+    └── README.md                     # This file
 ```
 
-### Adding New Features
-
-The modular design makes it easy to extend:
+### Extending the System
 - **Additional cameras** - Add new locations to camera manager
-- **New detection methods** - Add to YOLO processing pipeline
-- **Additional notifications** - Extend Discord webhook system
-- **Enhanced AI models** - Modify unified training pipeline with Smart Sample Management
 - **New species** - Extend model with additional classes via NABirds integration
-- **Data analysis** - Query SQLite database for location-based insights
-- **Custom locations** - Support any number of camera locations
+- **Enhanced AI models** - Modify training pipeline with Smart Sample Management
+- **Data analysis** - Query SQLite database for insights
 - **Performance tracking** - Extend evaluation dashboard with custom metrics
-- **Advanced analytics** - Build on comprehensive metadata for deeper insights
 
 ## 🙏 Acknowledgments
 
