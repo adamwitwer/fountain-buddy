@@ -1,0 +1,59 @@
+{
+  "model_path": "models/enhanced_nabirds_cnn.keras",
+  "class_names": [
+    "American Robin",
+    "Black-capped Chickadee",
+    "Blue Jay",
+    "Common Grackle",
+    "Downy Woodpecker",
+    "European Starling",
+    "Gray Catbird",
+    "House Finch",
+    "House Sparrow",
+    "Mourning Dove",
+    "Northern Cardinal",
+    "Red-bellied Woodpecker",
+    "Red-winged Blackbird",
+    "Song Sparrow",
+    "Tufted Titmouse",
+    "White-breasted Nuthatch"
+  ],
+  "num_classes": 16,
+  "image_size": [
+    224,
+    224
+  ],
+  "training_date": "2025-07-31T08:18:29.611474",
+  "data_source": "clean_nabirds_plus_human_corrections",
+  "total_training_samples": 1715,
+  "total_validation_samples": 427,
+  "final_accuracy": 0.31253644824028015,
+  "final_val_accuracy": 0.2786885201931,
+  "best_val_accuracy": 0.2786885201931,
+  "epochs_completed": 63,
+  "species_distribution": {
+    "House_Finch": 105,
+    "Northern_Cardinal": 150,
+    "Blue_Jay": 145,
+    "Song_Sparrow": 102,
+    "Common_Grackle": 150,
+    "American_Robin": 150,
+    "Black-capped_Chickadee": 100,
+    "Mourning_Dove": 150,
+    "Gray_Catbird": 150,
+    "Downy_Woodpecker": 150,
+    "House_Sparrow": 150,
+    "Red-bellied_Woodpecker": 150,
+    "White-breasted_Nuthatch": 113,
+    "Red-winged_Blackbird": 101,
+    "Tufted_Titmouse": 126,
+    "European_Starling": 150
+  },
+  "model_architecture": "Enhanced Custom CNN (NABirds + Human)",
+  "improvements": [
+    "clean_nabirds_foundation_64_6_percent",
+    "human_discord_corrections_added",
+    "custom_cnn_not_transfer_learning",
+    "caps_maintained_150_per_species"
+  ]
+}

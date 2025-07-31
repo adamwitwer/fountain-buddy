@@ -48,13 +48,30 @@ class AutoRetrainer:
         last_training_date = self.get_last_training_date()
         
         if last_training_date:
+            # Convert ISO format (2025-07-30T08:59:02.475748) to database format (2025-07-30 08:59:02)
+            # Handle both with and without microseconds
+            if 'T' in last_training_date:
+                # Convert from ISO format to database format
+                from datetime import datetime
+                try:
+                    if '.' in last_training_date:
+                        dt = datetime.fromisoformat(last_training_date)
+                    else:
+                        dt = datetime.fromisoformat(last_training_date)
+                    db_format_date = dt.strftime('%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    # Fallback: just replace T with space and remove microseconds
+                    db_format_date = last_training_date.replace('T', ' ').split('.')[0]
+            else:
+                db_format_date = last_training_date
+            
             cursor.execute("""
                 SELECT COUNT(*) FROM bird_visits 
                 WHERE species IS NOT NULL 
                 AND confidence = 1.0 
                 AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird')
                 AND timestamp > ?
-            """, (last_training_date,))
+            """, (db_format_date,))
         else:
             cursor.execute("""
                 SELECT COUNT(*) FROM bird_visits 
