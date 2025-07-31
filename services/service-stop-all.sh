@@ -24,7 +24,7 @@ for service in "$MAIN_SERVICE" "$BOT_SERVICE"; do
         STATUS=$(launchctl list "$service" 2>/dev/null)
         if echo "$STATUS" | grep -q '"PID" = [0-9]'; then
             echo "⚠️ Force stopping $service..."
-            launchctl kill TERM "$service"
+            launchctl kill TERM "gui/501/$service"
         fi
     fi
 done

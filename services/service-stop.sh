@@ -15,7 +15,7 @@ if launchctl list | grep -q "$SERVICE_NAME"; then
     STATUS=$(launchctl list "$SERVICE_NAME" 2>/dev/null)
     if echo "$STATUS" | grep -q '"PID" = [0-9]'; then
         echo "⚠️ Service still running, force stopping..."
-        launchctl kill TERM "$SERVICE_NAME"
+        launchctl kill TERM "gui/501/$SERVICE_NAME"
         sleep 2
     fi
 fi
