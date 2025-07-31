@@ -31,16 +31,12 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 - **Daily email summaries** - Beautiful reports with accurate species counts
 - **Confidence tracking** - AI vs human identification comparison
 
-### 🧠 Revolutionary Custom CNN System
-- **Custom CNN architecture** - Built from scratch specifically for bird classification (NO transfer learning)
-- **Clean NABirds foundation** - 1,596 perfectly balanced professional images (96-100 per species)
-- **Zero human bias** - Pure professional photography eliminates training data contamination
-- **64.6% accuracy breakthrough** - Massive improvement over previous <20% transfer learning failures
-- **Intelligent mistakes** - "Downy Woodpecker" → "Red-bellied Woodpecker" (reasonable confusions vs random errors)
+### 🧠 Custom CNN System
+- **Custom CNN architecture** - Built from scratch specifically for bird classification
+- **Clean NABirds foundation** - 1,596 balanced professional images (96-100 per species)
 - **Hybrid enhancement** - Clean foundation + Discord corrections for continuous improvement
 - **Apple Silicon optimized** - Custom training pipeline leverages M4 Pro Metal acceleration
 - **Automated retraining** - Nightly improvements using clean base + human corrections
-- **Production reliability** - Proven architecture that actually works vs experimental approaches
 
 ### 🔄 Complete Workflow
 1. **Bird visits location** → Motion/AI detection triggers at fountain, peanut feeder, etc.
@@ -111,7 +107,7 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 
 ### 🐧 **Alternative: Linux Setup** 
 
-For non-Mac systems (performance will be slower):
+For non-Mac systems:
 
 1. **Standard setup**
    ```bash
@@ -253,9 +249,9 @@ DISCORD_CHANNEL_PEANUT_ID=peanut_channel_id
 
 4. **Automatic Updates**
    - Database updated with your identification and location
-   - Image saved to location folder: `bird_images/fountain/bird_Blue_Jay_2025-07-01_14-30-15.jpg`
+   - Image saved to location folder.
    - Training data collected for unified AI model improvement
-   - Perfect accuracy for daily reports by location
+   - Daily reports by location
 
 ### Daily Reports
 
@@ -266,26 +262,20 @@ Receive email summaries at 11 PM with:
 
 ### Enhanced AI Model Training
 
-The system features a revolutionary training approach optimized for Apple Silicon performance:
+The system features a training approach optimized for Apple Silicon performance:
 
 #### 🚀 **Apple Silicon Acceleration**
-- **Mac M4 Pro**: 15 minutes training time (vs 2+ hours on other platforms)
 - **TensorFlow Metal**: Native GPU acceleration for Apple Silicon
 - **Unified memory**: Efficient data loading and processing
 - **Real-time feedback**: Fast iteration cycle for model improvements
-
-#### 🎯 **NABirds Integration**
-- **Professional dataset boost** - 265+ curated NABirds images added for balanced training
-- **Massive accuracy improvements** - Blue Jay samples: 8 → 80 (+900%), Gray Catbird: 30 → 80 (+167%)
-- **Balanced representation** - All backyard species now have 80-120 samples for consistent performance
-- **Hybrid training approach** - Your local expertise + professional reference images = superior accuracy
-
-#### ⚡ **Optimized Training Pipeline**
-- **4x faster training** on Apple Silicon - Advanced optimizations reduce training time dramatically
-- **Mixed precision training** - Leverages M4 Pro neural engine for maximum speed
 - **Enhanced data augmentation** - Better generalization through aggressive image transformations
 - **Learning rate scheduling** - Smooth convergence with adaptive learning rates
 - **Early stopping** - Prevents overfitting with intelligent patience mechanisms
+
+#### 🎯 **NABirds Integration**
+- **Professional dataset boost** - 265+ curated NABirds images added for balanced training
+- **Balanced representation** - All backyard species now have 80-120 samples for consistent performance
+- **Hybrid training approach** - Your local expertise + professional reference images = superior accuracy
 
 #### 🔄 **Automated Learning System**
 - **Daily auto-retraining** runs at 11:00 PM when 15+ new identifications collected
