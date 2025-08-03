@@ -74,31 +74,36 @@ class CameraManager:
         
         headers = {'Content-Type': 'application/json'}
         
-        try:
-            response = requests.post(
-                f"{self.base_url}?cmd=Login", 
-                headers=headers, 
-                data=json.dumps([login_cmd]), 
-                timeout=10
-            )
-            response.raise_for_status()
-            
-            res_json = response.json()
-            if res_json and res_json[0]['code'] == 0:
-                token_info = res_json[0]['value']['Token']
-                self.current_token = token_info['name']
-                lease_time = token_info['leaseTime']
-                self.token_expiry_time = time.time() + lease_time - 300  # Refresh 5 minutes before expiry
+        for i in range(2): # Try up to 2 times
+            try:
+                response = requests.post(
+                    f"{self.base_url}?cmd=Login", 
+                    headers=headers, 
+                    data=json.dumps([login_cmd]), 
+                    timeout=10
+                )
+                response.raise_for_status()
                 
-                print(f"✅ Token obtained for {self.camera_id}: {self.current_token[:8]}... (expires in {lease_time}s)")
-                return self.current_token
-            else:
-                print(f"❌ Failed to get token for {self.camera_id}: {res_json[0].get('error', {})}")
+                res_json = response.json()
+                if res_json and res_json[0]['code'] == 0:
+                    token_info = res_json[0]['value']['Token']
+                    self.current_token = token_info['name']
+                    lease_time = token_info['leaseTime']
+                    self.token_expiry_time = time.time() + lease_time - 300  # Refresh 5 minutes before expiry
+                    
+                    print(f"✅ Token obtained for {self.camera_id}: {self.current_token[:8]}... (expires in {lease_time}s)")
+                    return self.current_token
+                else:
+                    print(f"❌ Failed to get token for {self.camera_id}: {res_json[0].get('error', {})}")
+                    return None
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Network error getting token for {self.camera_id}: {e}")
+                if i == 0:
+                    print(f"🔄 Retrying token request for {self.camera_id} in 1 second...")
+                    time.sleep(1)
+                    continue
                 return None
-                
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Network error getting token for {self.camera_id}: {e}")
-            return None
     
     def call_api(self, command: str, params: Optional[Dict] = None, action: int = 0) -> Optional[Dict]:
         """Make an API call to the camera."""
@@ -117,24 +122,61 @@ class CameraManager:
         headers = {'Content-Type': 'application/json'}
         url = f"{self.base_url}?cmd={command}&token={token}"
         
-        try:
-            response = requests.post(url, headers=headers, data=json.dumps([cmd_payload]), timeout=10)
-            response.raise_for_status()
-            
-            res_json = response.json()
-            if res_json and res_json[0]['code'] == 0:
-                return res_json[0].get('value')
-            else:
-                error_details = res_json[0].get('error', {}).get('detail', 'Unknown API Error')
-                print(f"❌ API call {command} failed for {self.camera_id}: {error_details}")
-                return None
+        for i in range(2): # Try up to 2 times
+            try:
+                response = requests.post(url, headers=headers, data=json.dumps([cmd_payload]), timeout=10)
+                response.raise_for_status()
                 
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Network error calling {command} for {self.camera_id}: {e}")
-            return None
-        except json.JSONDecodeError:
-            print(f"❌ Failed to decode JSON response for {command} on {self.camera_id}")
-            return None
+                res_json = response.json()
+                if res_json and res_json[0]['code'] == 0:
+                    return res_json[0].get('value')
+                else:
+                    # Check for login error (-6) and retry once.
+                    if res_json and res_json[0].get('error', {}).get('rspCode') == -6:
+                        print(f"🔑 Token expired for {self.camera_id} on API call '{command}'. Re-logging in.")
+                        self.current_token = None  # Invalidate token
+                        token = self.get_token()   # Get new token
+                        if not token:
+                            print(f"❌ Failed to get new token for {self.camera_id}. Aborting retry.")
+                            return None
+                        
+                        # Retry the request with the new token
+                        print(f"🔄 Retrying API call '{command}' for {self.camera_id} with new token.")
+                        url = f"{self.base_url}?cmd={command}&token={token}"
+                        try:
+                            retry_response = requests.post(url, headers=headers, data=json.dumps([cmd_payload]), timeout=10)
+                            retry_response.raise_for_status()
+                            retry_res_json = retry_response.json()
+
+                            if retry_res_json and retry_res_json[0]['code'] == 0:
+                                print(f"✅ Retry successful for API call '{command}' on {self.camera_id}.")
+                                return retry_res_json[0].get('value')
+                            else:
+                                # Even retry failed, so log and exit
+                                error_details = retry_res_json[0].get('error', {}).get('detail', 'Unknown API Error on retry')
+                                print(f"❌ Retry failed for API call '{command}' on {self.camera_id}: {error_details}")
+                                return None
+                        except requests.exceptions.RequestException as e:
+                            print(f"❌ Network error on retry for {command} for {self.camera_id}: {e}")
+                            return None
+                        except json.JSONDecodeError:
+                            print(f"❌ Failed to decode JSON response on retry for {command} on {self.camera_id}")
+                            return None
+
+                    error_details = res_json[0].get('error', {}).get('detail', 'Unknown API Error')
+                    print(f"❌ API call {command} failed for {self.camera_id}: {error_details}")
+                    return None
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Network error calling {command} for {self.camera_id}: {e}")
+                if i == 0:
+                    print(f"🔄 Retrying API call '{command}' for {self.camera_id} in 1 second...")
+                    time.sleep(1)
+                    continue
+                return None
+            except json.JSONDecodeError:
+                print(f"❌ Failed to decode JSON response for {command} on {self.camera_id}")
+                return None
     
     def get_ai_capabilities(self) -> Dict:
         """Get AI detection capabilities for this camera."""
@@ -153,24 +195,60 @@ class CameraManager:
         
         url = f"{self.base_url}?cmd=GetMdState&channel={channel}&token={token}"
         
-        try:
-            response = requests.post(url, timeout=5)
-            response.raise_for_status()
-            
-            res_json = response.json()
-            if res_json and res_json[0]['code'] == 0:
-                return res_json[0]['value']['state']  # 1 for detected, 0 for no motion
-            else:
-                error_details = res_json[0].get('error', {}).get('detail', 'Unknown MD State Error')
-                print(f"❌ Failed to get motion state for {self.camera_id}: {error_details}")
-                return None
+        for i in range(2): # Try up to 2 times
+            try:
+                response = requests.post(url, timeout=5)
+                response.raise_for_status()
                 
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Network error getting motion state for {self.camera_id}: {e}")
-            return None
-        except json.JSONDecodeError:
-            print(f"❌ Failed to decode motion state response for {self.camera_id}")
-            return None
+                res_json = response.json()
+                if res_json and res_json[0]['code'] == 0:
+                    return res_json[0]['value']['state']  # 1 for detected, 0 for no motion
+                else:
+                    # Check for login error (-6) and retry once.
+                    if res_json and res_json[0].get('error', {}).get('rspCode') == -6:
+                        print(f"🔑 Token expired for {self.camera_id} during GetMdState. Re-logging in.")
+                        self.current_token = None  # Invalidate token
+                        token = self.get_token()   # Get new token
+                        if not token:
+                            print(f"❌ Failed to get new token for {self.camera_id}. Aborting GetMdState retry.")
+                            return None
+                        
+                        # Retry the request with the new token
+                        print(f"🔄 Retrying GetMdState for {self.camera_id} with new token.")
+                        url = f"{self.base_url}?cmd=GetMdState&channel={channel}&token={token}"
+                        try:
+                            retry_response = requests.post(url, timeout=5)
+                            retry_response.raise_for_status()
+                            retry_res_json = retry_response.json()
+
+                            if retry_res_json and retry_res_json[0]['code'] == 0:
+                                print(f"✅ Retry successful for GetMdState on {self.camera_id}.")
+                                return retry_res_json[0]['value']['state']
+                            else:
+                                error_details = retry_res_json[0].get('error', {}).get('detail', 'Unknown MD State Error on retry')
+                                print(f"❌ Retry failed for GetMdState on {self.camera_id}: {error_details}")
+                                return None
+                        except requests.exceptions.RequestException as e:
+                            print(f"❌ Network error on retry for GetMdState for {self.camera_id}: {e}")
+                            return None
+                        except json.JSONDecodeError:
+                            print(f"❌ Failed to decode motion state response on retry for {self.camera_id}")
+                            return None
+
+                    error_details = res_json[0].get('error', {}).get('detail', 'Unknown MD State Error')
+                    print(f"❌ Failed to get motion state for {self.camera_id}: {error_details}")
+                    return None
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"❌ Network error getting motion state for {self.camera_id}: {e}")
+                if i == 0:
+                    print(f"🔄 Retrying GetMdState for {self.camera_id} in 1 second...")
+                    time.sleep(1)
+                    continue
+                return None
+            except json.JSONDecodeError:
+                print(f"❌ Failed to decode motion state response for {self.camera_id}")
+                return None
     
     def get_ai_state(self, channel: int = 0) -> Dict:
         """Get AI detection state for this camera."""

@@ -6,7 +6,9 @@
       "Bash(rg:*)",
       "Bash(grep:*)",
       "Bash(python3:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(launchctl:*)",
+      "Bash(sudo launchctl:*)"
     ],
     "deny": []
   }
