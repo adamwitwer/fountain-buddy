@@ -197,3 +197,6 @@ training_data_peanut/
 
 # Cleanup and utility scripts
 cleanup_repo.sh
+
+# Services
+services/
