@@ -33,6 +33,7 @@ from tensorflow.keras.layers import Conv2D, MaxPooling2D, Dense, Flatten, Dropou
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.utils import Sequence
 import cv2
 import shutil
 from datetime import datetime
@@ -42,6 +43,90 @@ import glob
 from collections import Counter
 import random
 import re
+import pytz
+from sklearn.utils import class_weight
+
+class WeightedDataGenerator(Sequence):
+    def __init__(self, directory, image_paths, labels, class_indices, batch_size, target_size,
+                 timestamps, augmentor, shuffle=True):
+        self.directory = Path(directory)
+        self.image_paths = image_paths
+        self.labels = labels
+        self.class_indices = class_indices
+        self.batch_size = batch_size
+        self.target_size = target_size
+        self.timestamps = timestamps
+        self.augmentor = augmentor
+        self.shuffle = shuffle
+        self.num_classes = len(class_indices)
+        self.indices = np.arange(len(self.image_paths))
+        self.on_epoch_end()
+
+    def __len__(self):
+        return int(np.floor(len(self.image_paths) / self.batch_size))
+
+    def __getitem__(self, index):
+        batch_indices = self.indices[index * self.batch_size:(index + 1) * self.batch_size]
+        batch_paths = [self.image_paths[i] for i in batch_indices]
+        batch_labels = [self.labels[i] for i in batch_indices]
+        
+        X, y = self.__data_generation(batch_paths, batch_labels)
+        sample_weights = self.__get_sample_weights(batch_paths)
+        
+        return X, y, sample_weights
+
+    def on_epoch_end(self):
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+
+    def __data_generation(self, batch_paths, batch_labels):
+        X = np.empty((len(batch_paths), *self.target_size, 3))
+        y = np.empty((len(batch_paths)), dtype=int)
+
+        for i, path in enumerate(batch_paths):
+            img = cv2.imread(str(path))
+            if img is not None:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, self.target_size)
+                X[i,] = self.augmentor.random_transform(img) if self.augmentor else img
+            else:
+                print(f"Warning: Could not read image {path}. Replacing with zeros.")
+                X[i,] = np.zeros((*self.target_size, 3))
+
+            y[i] = batch_labels[i]
+
+        # Rescale and convert to one-hot
+        X = X / 255.0
+        return X, tf.keras.utils.to_categorical(y, num_classes=self.num_classes)
+
+    def __get_sample_weights(self, batch_paths):
+        weights = np.ones(len(batch_paths))
+        now = datetime.now()
+        
+        for i, path in enumerate(batch_paths):
+            timestamp_str = self.timestamps.get(str(path))
+            if timestamp_str:
+                try:
+                    # Handle ISO format with potential timezone
+                    timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    # Make timestamp timezone-aware if it's naive
+                    if timestamp.tzinfo is None:
+                         # Assuming UTC if no timezone info, adjust as needed
+                        timestamp = timestamp.replace(tzinfo=pytz.UTC)
+                    
+                    # Ensure 'now' is also timezone-aware for correct comparison
+                    now_aware = now.astimezone(pytz.UTC)
+
+                    age = (now_aware - timestamp).total_seconds()
+                    # Weight decays linearly over 30 days from 2.0 to 1.0
+                    # Max weight of 2.0 for newest, baseline of 1.0 for >30 days old
+                    weight = max(1.0, 2.0 - age / (30 * 24 * 3600))
+                    weights[i] = weight
+                except (ValueError, TypeError) as e:
+                    # Fallback for unexpected timestamp formats
+                    print(f"Warning: Could not parse timestamp '{timestamp_str}' for {path}. Using default weight. Error: {e}")
+                    weights[i] = 1.0
+        return weights
 
 class EnhancedBirdTrainerCNN:
     def __init__(self, db_path='fountain_buddy.db', images_dir='bird_images', 
@@ -52,6 +137,7 @@ class EnhancedBirdTrainerCNN:
         self.unified_dir = unified_dir
         self.model = None
         self.class_names = None
+        self.human_correction_timestamps = {}
         
         # Training parameters
         self.img_size = (224, 224)
@@ -140,7 +226,7 @@ class EnhancedBirdTrainerCNN:
         cursor = conn.cursor()
         
         cursor.execute("""
-            SELECT species, image_path FROM bird_visits 
+            SELECT species, image_path, timestamp FROM bird_visits 
             WHERE species IS NOT NULL 
             AND confidence = 1.0 
             AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird', 'skip')
@@ -212,8 +298,9 @@ class EnhancedBirdTrainerCNN:
         print("👥 Adding human corrections...")
         human_data = self.load_human_verified_data()
         human_stats = Counter()
+        self.human_correction_timestamps = {} # Reset for each run
         
-        for species, image_path in human_data:
+        for species, image_path, timestamp in human_data:
             if not species or not image_path:
                 continue
                 
@@ -250,6 +337,8 @@ class EnhancedBirdTrainerCNN:
                     dest_path = dest_species_dir / dest_filename
                     shutil.copy2(resolved_path, dest_path)
                     human_stats[nabirds_species_name] += 1
+                    # Store timestamp with the new path for weighting
+                    self.human_correction_timestamps[str(dest_path)] = timestamp
                 else:
                     print(f"⚠️ Could not find image: {image_path} (resolved to: {resolved_path})")
             except Exception as e:
@@ -337,10 +426,13 @@ class EnhancedBirdTrainerCNN:
         print("🔍 Calculating per-species validation accuracy...")
         
         # Get predictions for validation set
-        predictions = self.model.predict(val_generator, verbose=0)
-        predicted_classes = np.argmax(predictions, axis=1)
-        true_classes = val_generator.classes
+        y_pred = self.model.predict(val_generator, verbose=0)
+        predicted_classes = np.argmax(y_pred, axis=1)
         
+        # Extract true labels from the generator
+        true_classes = np.concatenate([val_generator[i][1] for i in range(len(val_generator))])
+        true_classes = np.argmax(true_classes, axis=1)
+
         # Map class indices to species names
         class_to_species = {v: k for k, v in val_generator.class_indices.items()}
         
@@ -377,7 +469,10 @@ class EnhancedBirdTrainerCNN:
         predictions = self.model.predict(val_generator, verbose=0)
         max_confidences = np.max(predictions, axis=1)
         predicted_classes = np.argmax(predictions, axis=1)
-        true_classes = val_generator.classes
+        
+        # Extract true labels from the generator
+        true_classes_one_hot = np.concatenate([val_generator[i][1] for i in range(len(val_generator))])
+        true_classes = np.argmax(true_classes_one_hot, axis=1)
         
         # Confidence bins
         confidence_bins = {
@@ -503,50 +598,70 @@ class EnhancedBirdTrainerCNN:
             print("💡 Tip: Check file paths in database and ensure images exist in expected locations.")
             return None
         
-        # Setup data generators
-        train_datagen = ImageDataGenerator(
-            rescale=1./255,
+        # Manually collect all file paths and labels
+        all_image_paths = []
+        all_labels = []
+        
+        # Create a temporary generator to get class indices
+        temp_gen = ImageDataGenerator().flow_from_directory(self.unified_dir, shuffle=False)
+        self.class_names = list(temp_gen.class_indices.keys())
+        class_indices = temp_gen.class_indices
+        
+        for species_dir in Path(self.unified_dir).iterdir():
+            if species_dir.is_dir():
+                species_name = species_dir.name
+                label = class_indices[species_name]
+                for img_path in species_dir.glob("*.jpg"):
+                    all_image_paths.append(str(img_path))
+                    all_labels.append(label)
+
+        # Split data into training and validation sets
+        from sklearn.model_selection import train_test_split
+        train_paths, val_paths, train_labels, val_labels = train_test_split(
+            all_image_paths, all_labels, test_size=0.2, random_state=42, stratify=all_labels
+        )
+
+        # Setup data augmentor for training
+        train_augmentor = ImageDataGenerator(
             rotation_range=30,
             width_shift_range=0.25,
             height_shift_range=0.25,
             horizontal_flip=True,
             zoom_range=0.2,
             shear_range=0.15,
-            brightness_range=[0.8, 1.2],
-            validation_split=0.2
+            brightness_range=[0.8, 1.2]
+        )
+
+        # Create weighted generators
+        train_generator = WeightedDataGenerator(
+            self.unified_dir, train_paths, train_labels, class_indices,
+            self.batch_size, self.img_size, self.human_correction_timestamps,
+            augmentor=train_augmentor, shuffle=True
         )
         
-        val_datagen = ImageDataGenerator(
-            rescale=1./255,
-            validation_split=0.2
+        val_generator = WeightedDataGenerator(
+            self.unified_dir, val_paths, val_labels, class_indices,
+            self.batch_size, self.img_size, self.human_correction_timestamps,
+            augmentor=None, shuffle=False # No augmentation for validation
         )
         
-        train_generator = train_datagen.flow_from_directory(
-            self.unified_dir,
-            target_size=self.img_size,
-            batch_size=self.batch_size,
-            class_mode='categorical',
-            subset='training',
-            shuffle=True
-        )
-        
-        val_generator = val_datagen.flow_from_directory(
-            self.unified_dir,
-            target_size=self.img_size,
-            batch_size=self.batch_size,
-            class_mode='categorical',
-            subset='validation',
-            shuffle=False
-        )
-        
-        self.class_names = list(train_generator.class_indices.keys())
         num_classes = len(self.class_names)
         
-        print(f"✅ Training: {train_generator.samples}, Validation: {val_generator.samples}")
+        print(f"✅ Training: {len(train_paths)}, Validation: {len(val_paths)}")
+        num_classes = len(self.class_names)
         
         # Create model
         self.model = self.create_enhanced_cnn(num_classes)
         
+        # Calculate class weights to handle imbalance
+        class_weights = class_weight.compute_class_weight(
+            'balanced',
+            classes=np.unique(train_labels),
+            y=train_labels
+        )
+        class_weights_dict = dict(enumerate(class_weights))
+        print(f"⚖️ Applying class weights to handle data imbalance.")
+
         # Callbacks
         callbacks = [
             EarlyStopping(
@@ -565,12 +680,13 @@ class EnhancedBirdTrainerCNN:
         ]
         
         # Train
-        print("🚀 Starting enhanced training...")
+        print("🚀 Starting enhanced training with sample weights...")
         history = self.model.fit(
             train_generator,
             epochs=self.epochs,
             validation_data=val_generator,
             callbacks=callbacks,
+            class_weight=class_weights_dict,
             verbose=1
         )
         
@@ -596,8 +712,8 @@ class EnhancedBirdTrainerCNN:
             "image_size": list(self.img_size),
             "training_date": datetime.now().isoformat(),
             "data_source": "clean_nabirds_plus_human_corrections",
-            "total_training_samples": train_generator.samples,
-            "total_validation_samples": val_generator.samples,
+            "total_training_samples": len(train_paths),
+            "total_validation_samples": len(val_paths),
             "final_accuracy": float(history.history['accuracy'][-1]),
             "final_val_accuracy": float(val_accuracy),
             "best_val_accuracy": float(max(history.history['val_accuracy'])),
@@ -609,7 +725,9 @@ class EnhancedBirdTrainerCNN:
                 "human_discord_corrections_added",
                 "custom_cnn_not_transfer_learning",
                 "caps_maintained_150_per_species",
-                "smart_sample_management_implemented"
+                "smart_sample_management_implemented",
+                "sample_weighting_by_recency",
+                "class_weighting_for_imbalance"
             ],
             # New comprehensive evaluation metrics
             "evaluation_metrics": {
