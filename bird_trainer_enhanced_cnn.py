@@ -48,7 +48,7 @@ from sklearn.utils import class_weight
 
 class WeightedDataGenerator(Sequence):
     def __init__(self, directory, image_paths, labels, class_indices, batch_size, target_size,
-                 timestamps, augmentor, shuffle=True):
+                 timestamps, augmentor, class_weights=None, shuffle=True):
         self.directory = Path(directory)
         self.image_paths = image_paths
         self.labels = labels
@@ -57,6 +57,7 @@ class WeightedDataGenerator(Sequence):
         self.target_size = target_size
         self.timestamps = timestamps
         self.augmentor = augmentor
+        self.class_weights = class_weights # Store class weights
         self.shuffle = shuffle
         self.num_classes = len(class_indices)
         self.indices = np.arange(len(self.image_paths))
@@ -71,7 +72,8 @@ class WeightedDataGenerator(Sequence):
         batch_labels = [self.labels[i] for i in batch_indices]
         
         X, y = self.__data_generation(batch_paths, batch_labels)
-        sample_weights = self.__get_sample_weights(batch_paths)
+        # Pass batch_labels to get combined sample weights
+        sample_weights = self.__get_sample_weights(batch_paths, batch_labels)
         
         return X, y, sample_weights
 
@@ -99,33 +101,37 @@ class WeightedDataGenerator(Sequence):
         X = X / 255.0
         return X, tf.keras.utils.to_categorical(y, num_classes=self.num_classes)
 
-    def __get_sample_weights(self, batch_paths):
+    def __get_sample_weights(self, batch_paths, batch_labels):
         weights = np.ones(len(batch_paths))
         now = datetime.now()
         
         for i, path in enumerate(batch_paths):
+            # 1. Calculate recency weight
+            recency_weight = 1.0
             timestamp_str = self.timestamps.get(str(path))
             if timestamp_str:
                 try:
-                    # Handle ISO format with potential timezone
                     timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    # Make timestamp timezone-aware if it's naive
                     if timestamp.tzinfo is None:
-                         # Assuming UTC if no timezone info, adjust as needed
                         timestamp = timestamp.replace(tzinfo=pytz.UTC)
                     
-                    # Ensure 'now' is also timezone-aware for correct comparison
                     now_aware = now.astimezone(pytz.UTC)
 
                     age = (now_aware - timestamp).total_seconds()
-                    # Weight decays linearly over 30 days from 2.0 to 1.0
-                    # Max weight of 2.0 for newest, baseline of 1.0 for >30 days old
-                    weight = max(1.0, 2.0 - age / (30 * 24 * 3600))
-                    weights[i] = weight
+                    recency_weight = max(1.0, 2.0 - age / (30 * 24 * 3600))
                 except (ValueError, TypeError) as e:
-                    # Fallback for unexpected timestamp formats
                     print(f"Warning: Could not parse timestamp '{timestamp_str}' for {path}. Using default weight. Error: {e}")
-                    weights[i] = 1.0
+            
+            # 2. Get class weight
+            class_w = 1.0
+            if self.class_weights:
+                label = batch_labels[i]
+                if label in self.class_weights:
+                    class_w = self.class_weights[label]
+            
+            # 3. Combine weights
+            weights[i] = recency_weight * class_w
+            
         return weights
 
 class EnhancedBirdTrainerCNN:
@@ -430,8 +436,12 @@ class EnhancedBirdTrainerCNN:
         predicted_classes = np.argmax(y_pred, axis=1)
         
         # Extract true labels from the generator
-        true_classes = np.concatenate([val_generator[i][1] for i in range(len(val_generator))])
-        true_classes = np.argmax(true_classes, axis=1)
+        true_classes_list = []
+        for i in range(len(val_generator)):
+            _, y_batch, _ = val_generator[i] # Get the one-hot encoded labels
+            true_classes_list.append(y_batch)
+        true_classes_one_hot = np.concatenate(true_classes_list)
+        true_classes = np.argmax(true_classes_one_hot, axis=1)
 
         # Map class indices to species names
         class_to_species = {v: k for k, v in val_generator.class_indices.items()}
@@ -471,7 +481,11 @@ class EnhancedBirdTrainerCNN:
         predicted_classes = np.argmax(predictions, axis=1)
         
         # Extract true labels from the generator
-        true_classes_one_hot = np.concatenate([val_generator[i][1] for i in range(len(val_generator))])
+        true_classes_list = []
+        for i in range(len(val_generator)):
+            _, y_batch, _ = val_generator[i] # Get the one-hot encoded labels
+            true_classes_list.append(y_batch)
+        true_classes_one_hot = np.concatenate(true_classes_list)
         true_classes = np.argmax(true_classes_one_hot, axis=1)
         
         # Confidence bins
@@ -621,6 +635,15 @@ class EnhancedBirdTrainerCNN:
             all_image_paths, all_labels, test_size=0.2, random_state=42, stratify=all_labels
         )
 
+        # Calculate class weights to handle imbalance
+        class_weights = class_weight.compute_class_weight(
+            'balanced',
+            classes=np.unique(train_labels),
+            y=train_labels
+        )
+        class_weights_dict = dict(enumerate(class_weights))
+        print(f"⚖️ Applying combined sample and class weights to handle data imbalance and recency.")
+
         # Setup data augmentor for training
         train_augmentor = ImageDataGenerator(
             rotation_range=30,
@@ -632,36 +655,26 @@ class EnhancedBirdTrainerCNN:
             brightness_range=[0.8, 1.2]
         )
 
-        # Create weighted generators
+        # Create weighted generators, passing the class_weights_dict
         train_generator = WeightedDataGenerator(
             self.unified_dir, train_paths, train_labels, class_indices,
             self.batch_size, self.img_size, self.human_correction_timestamps,
-            augmentor=train_augmentor, shuffle=True
+            augmentor=train_augmentor, class_weights=class_weights_dict, shuffle=True
         )
         
         val_generator = WeightedDataGenerator(
             self.unified_dir, val_paths, val_labels, class_indices,
             self.batch_size, self.img_size, self.human_correction_timestamps,
-            augmentor=None, shuffle=False # No augmentation for validation
+            augmentor=None, class_weights=class_weights_dict, shuffle=False # Also weight validation for consistent loss
         )
         
         num_classes = len(self.class_names)
         
         print(f"✅ Training: {len(train_paths)}, Validation: {len(val_paths)}")
-        num_classes = len(self.class_names)
         
         # Create model
         self.model = self.create_enhanced_cnn(num_classes)
         
-        # Calculate class weights to handle imbalance
-        class_weights = class_weight.compute_class_weight(
-            'balanced',
-            classes=np.unique(train_labels),
-            y=train_labels
-        )
-        class_weights_dict = dict(enumerate(class_weights))
-        print(f"⚖️ Applying class weights to handle data imbalance.")
-
         # Callbacks
         callbacks = [
             EarlyStopping(
@@ -680,13 +693,13 @@ class EnhancedBirdTrainerCNN:
         ]
         
         # Train
-        print("🚀 Starting enhanced training with sample weights...")
+        print("🚀 Starting enhanced training with combined sample weights...")
         history = self.model.fit(
             train_generator,
             epochs=self.epochs,
             validation_data=val_generator,
             callbacks=callbacks,
-            class_weight=class_weights_dict,
+            # REMOVED: class_weight=class_weights_dict,
             verbose=1
         )
         
