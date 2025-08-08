@@ -33,43 +33,13 @@ import cv2
 
 class CustomBirdClassifier:
     def __init__(self, model_path=None, metadata_path=None):
-        # Try enhanced CNN first (clean + human corrections), then clean optimized, then legacy models
+        # Use the enhanced NABirds CNN model by default
         if model_path is None:
-            enhanced_cnn_model = 'models/enhanced_nabirds_cnn.keras'
-            enhanced_cnn_metadata = 'models/enhanced_nabirds_cnn_metadata.json'
-            clean_model = 'models/clean_nabirds_optimized_cnn.keras'
-            clean_metadata = 'models/clean_nabirds_optimized_cnn_metadata.json'
-            enhanced_model_keras = 'models/enhanced_bird_classifier.keras'
-            enhanced_model_h5 = 'models/enhanced_bird_classifier.h5'
-            enhanced_metadata = 'models/enhanced_model_metadata.json'
-            unified_model = 'models/fountain_buddy_unified_classifier.h5'
-            unified_metadata = 'models/unified_model_metadata.json'
-            
-            if os.path.exists(enhanced_cnn_model) and os.path.exists(enhanced_cnn_metadata):
-                self.model_path = enhanced_cnn_model
-                self.metadata_path = enhanced_cnn_metadata
-                self.model_version = "enhanced_cnn"
-            elif os.path.exists(clean_model) and os.path.exists(clean_metadata):
-                self.model_path = clean_model
-                self.metadata_path = clean_metadata
-                self.model_version = "clean_optimized"
-            elif os.path.exists(enhanced_model_keras) and os.path.exists(enhanced_metadata):
-                self.model_path = enhanced_model_keras
-                self.metadata_path = enhanced_metadata
-                self.model_version = "enhanced"
-            elif os.path.exists(enhanced_model_h5) and os.path.exists(enhanced_metadata):
-                self.model_path = enhanced_model_h5
-                self.metadata_path = enhanced_metadata
-                self.model_version = "enhanced"
-            elif os.path.exists(unified_model) and os.path.exists(unified_metadata):
-                self.model_path = unified_model
-                self.metadata_path = unified_metadata
-                self.model_version = "unified"
-            else:
-                self.model_path = 'models/fountain_buddy_bird_classifier.h5'
-                self.metadata_path = 'models/model_metadata.json'
-                self.model_version = "legacy"
+            self.model_path = 'models/enhanced_nabirds_cnn.keras'
+            self.metadata_path = 'models/enhanced_nabirds_cnn_metadata.json'
+            self.model_version = "enhanced_cnn"
         else:
+            # Allow overriding for testing or other purposes
             self.model_path = model_path
             self.metadata_path = metadata_path
             self.model_version = "custom"

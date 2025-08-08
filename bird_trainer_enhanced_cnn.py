@@ -48,7 +48,7 @@ from sklearn.utils import class_weight
 
 class WeightedDataGenerator(Sequence):
     def __init__(self, directory, image_paths, labels, class_indices, batch_size, target_size,
-                 timestamps, augmentor, class_weights=None, shuffle=True):
+                 timestamps, augmentor, class_weights=None, shuffle=True, use_weights=True):
         self.directory = Path(directory)
         self.image_paths = image_paths
         self.labels = labels
@@ -58,6 +58,7 @@ class WeightedDataGenerator(Sequence):
         self.timestamps = timestamps
         self.augmentor = augmentor
         self.class_weights = class_weights # Store class weights
+        self.use_weights = use_weights
         self.shuffle = shuffle
         self.num_classes = len(class_indices)
         self.indices = np.arange(len(self.image_paths))
@@ -72,8 +73,13 @@ class WeightedDataGenerator(Sequence):
         batch_labels = [self.labels[i] for i in batch_indices]
         
         X, y = self.__data_generation(batch_paths, batch_labels)
-        # Pass batch_labels to get combined sample weights
-        sample_weights = self.__get_sample_weights(batch_paths, batch_labels)
+        
+        if self.use_weights:
+            # Pass batch_labels to get combined sample weights
+            sample_weights = self.__get_sample_weights(batch_paths, batch_labels)
+        else:
+            # For validation, return uniform weights of 1. This is equivalent to no weighting.
+            sample_weights = np.ones(len(batch_paths))
         
         return X, y, sample_weights
 
@@ -256,6 +262,7 @@ class EnhancedBirdTrainerCNN:
         # Balancing parameters
         MAX_SAMPLES_PER_SPECIES = 150
         MIN_SAMPLES_PER_SPECIES = 20
+        NABIRDS_PRESERVATION_RATIO = 0.4 # Keep at least 40% of original NABirds images
         
         # Step 1: Start with clean NABirds foundation
         print("📚 Starting with clean NABirds foundation...")
@@ -323,16 +330,30 @@ class EnhancedBirdTrainerCNN:
             current_count = len(current_files)
             
             if current_count >= MAX_SAMPLES_PER_SPECIES:
-                # Instead of skipping, replace the oldest NABirds image with this human correction
+                # Smart replacement with diversity preservation
                 nabirds_files = [f for f in current_files if f.name.startswith('nabirds_')]
-                if nabirds_files:
-                    # Find oldest NABirds file (by filename, since they maintain timestamp order)
-                    oldest_nabirds = min(nabirds_files, key=lambda f: f.stat().st_mtime)
+                human_files = [f for f in current_files if f.name.startswith('human_')]
+                
+                num_nabirds_base = clean_stats.get(nabirds_species_name, 0)
+                min_nabirds_to_keep = int(num_nabirds_base * NABIRDS_PRESERVATION_RATIO)
+
+                file_to_replace = None
+                if len(nabirds_files) > min_nabirds_to_keep:
+                    # Strategy 1: We have more NABirds images than the preservation threshold, so replace the oldest one.
+                    file_to_replace = min(nabirds_files, key=lambda f: f.stat().st_mtime)
                     print(f"🔄 {nabirds_species_name} at cap ({current_count}/{MAX_SAMPLES_PER_SPECIES})")
-                    print(f"   Replacing {oldest_nabirds.name} with human correction")
-                    oldest_nabirds.unlink()  # Remove oldest NABirds image
+                    print(f"   Replacing oldest NABirds image to improve specificity: {file_to_replace.name}")
+                elif human_files:
+                    # Strategy 2: We've hit the NABirds preservation floor. Replace the oldest human correction to keep the data fresh.
+                    file_to_replace = min(human_files, key=lambda f: f.stat().st_mtime)
+                    print(f"🔄 {nabirds_species_name} at cap ({current_count}/{MAX_SAMPLES_PER_SPECIES})")
+                    print(f"   NABirds diversity preserved. Replacing oldest human image to keep data fresh: {file_to_replace.name}")
+                
+                if file_to_replace:
+                    file_to_replace.unlink()
                 else:
-                    print(f"⚠️ {nabirds_species_name} at cap with only human corrections - skipping")
+                    # This case happens if a species is capped with only preserved NABirds images and no human images to replace.
+                    print(f"⚠️ {nabirds_species_name} at cap, diversity preserved, and no human files to replace. Skipping.")
                     continue
             
             # Copy human correction using robust file resolution
@@ -659,13 +680,13 @@ class EnhancedBirdTrainerCNN:
         train_generator = WeightedDataGenerator(
             self.unified_dir, train_paths, train_labels, class_indices,
             self.batch_size, self.img_size, self.human_correction_timestamps,
-            augmentor=train_augmentor, class_weights=class_weights_dict, shuffle=True
+            augmentor=train_augmentor, class_weights=class_weights_dict, shuffle=True, use_weights=True
         )
         
         val_generator = WeightedDataGenerator(
             self.unified_dir, val_paths, val_labels, class_indices,
             self.batch_size, self.img_size, self.human_correction_timestamps,
-            augmentor=None, class_weights=class_weights_dict, shuffle=False # Also weight validation for consistent loss
+            augmentor=None, class_weights=class_weights_dict, shuffle=False, use_weights=False # No weights for validation
         )
         
         num_classes = len(self.class_names)
