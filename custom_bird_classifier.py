@@ -150,45 +150,6 @@ class CustomBirdClassifier:
             print(f"Error in custom classifier: {e}")
             return "Unknown Bird", 0.0
     
-    def predict_for_location(self, image, location='fountain'):
-        """Predict bird species filtered by camera location"""
-        try:
-            if not self.is_loaded:
-                return "Unknown Bird", 0.0
-            
-            # Get all predictions from unified model
-            result = self.predict(image)
-            
-            # Location-specific species lists (matches Discord bot)
-            FOUNTAIN_SPECIES = {
-                "Northern Cardinal", "American Robin", "Common Grackle", 
-                "Blue Jay", "Mourning Dove", "House Sparrow", "Gray Catbird",
-                "House Finch", "Song Sparrow", "European Starling"
-            }
-            
-            PEANUT_SPECIES = {
-                "Red-bellied Woodpecker", "Black-capped Chickadee", "Northern Flicker",
-                "White-breasted Nuthatch", "Tufted Titmouse", "Carolina Wren", 
-                "European Starling", "Downy Woodpecker", "Hairy Woodpecker"
-            }
-            
-            location_species = FOUNTAIN_SPECIES if location == 'fountain' else PEANUT_SPECIES
-            
-            # Check if top prediction is valid for this location
-            if result['species'] in location_species:
-                return result['species'], result['confidence']
-            
-            # Check top 3 predictions for location-appropriate species
-            for species, confidence in result['top_3']:
-                if species in location_species and confidence > 0.10:
-                    return species, confidence
-            
-            # No location-appropriate prediction found
-            return "Unknown Bird", result['confidence']
-            
-        except Exception as e:
-            print(f"Error in location-specific classifier: {e}")
-            return "Unknown Bird", 0.0
 
 def integrate_with_main_app():
     """Integration instructions for the main application"""

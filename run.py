@@ -96,7 +96,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-def record_bird_visit(bird_type, frame, camera_manager, species=None, species_confidence=None):
+def record_bird_visit(bird_type, frame, camera_manager, species=None, species_confidence=None, ai_species=None):
     """Record a bird visit with location awareness."""
     
     timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -116,12 +116,13 @@ def record_bird_visit(bird_type, frame, camera_manager, species=None, species_co
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO bird_visits (timestamp, bird_type, species, confidence, image_path, location, camera_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO bird_visits (timestamp, bird_type, species, confidence, image_path, location, camera_id, ai_species)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
         bird_type, species, species_confidence, image_path,
-        camera_manager.location, camera_manager.camera_id
+        camera_manager.location, camera_manager.camera_id,
+        ai_species
     ))
     conn.commit()
     conn.close()
@@ -695,17 +696,26 @@ def original_classify_bird_species(image_crop):
         return None, 0
 
 def classify_bird_species(image_crop, camera_location='fountain'):
-    """Classify bird species using custom model with location filtering"""
+    """Classify bird species using the custom model."""
     try:
         if custom_classifier.is_loaded:
-            # Use location-aware prediction
-            species_name, confidence = custom_classifier.predict_for_location(image_crop, camera_location)
-            print(f"Custom classifier ({camera_location}): {species_name} ({confidence:.2f})")
-            return species_name, confidence
+            # Use the primary prediction method
+            result = custom_classifier.predict(image_crop)
+            species_name = result['species']
+            confidence = result['confidence']
+            
+            # Optional: Add a confidence threshold
+            if confidence > 0.15:
+                print(f"Custom classifier ({camera_location}): {species_name} ({confidence:.2f})")
+                return species_name, confidence
+            else:
+                print(f"Low confidence ({confidence:.2f}) for {species_name}. Reporting as Unknown Bird.")
+                return "Unknown Bird", confidence
+                
     except Exception as e:
         print(f"Custom classifier error: {e}")
     
-    # No model available - return Unknown Bird
+    # Fallback if model not loaded or error occurs
     return "Unknown Bird", 0.0
 
 def is_bird_species(label):
@@ -790,7 +800,7 @@ def process_bird_detection(camera_manager):
                         print(f"❌ Error during species classification: {e}")
                 
                 # Record the bird visit
-                image_path = record_bird_visit("bird", frame, camera_manager, species_name, species_confidence)
+                image_path = record_bird_visit("bird", frame, camera_manager, species=species_name, species_confidence=species_confidence, ai_species=species_name)
                 
                 # Send to Discord for human identification
                 if USE_DISCORD:

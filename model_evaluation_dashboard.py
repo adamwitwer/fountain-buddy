@@ -190,70 +190,80 @@ class ModelEvaluationDashboard:
         print(f"  Std deviation: {confidence_stats.get('std_confidence', 0):.3f}")
     
     def analyze_real_world_performance(self):
-        """Analyze real-world correction patterns from database"""
-        print("\n🌍 REAL-WORLD PERFORMANCE ANALYSIS")
+        # Analyze real-world correction patterns from database
+        print("\n🌍 REAL-WORLD PERFORMANCE ANALYSIS (Last 30 Days)")
         print("=" * 50)
         
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Get correction statistics for last 30 days
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=30)
+            start_date = datetime.now() - timedelta(days=30)
             
-            cursor.execute("""
-                SELECT 
-                    species,
-                    COUNT(*) as total_predictions,
-                    SUM(CASE WHEN confidence = 1.0 THEN 1 ELSE 0 END) as human_corrections,
-                    AVG(CASE WHEN confidence < 1.0 THEN confidence ELSE NULL END) as avg_ai_confidence
-                FROM bird_visits 
-                WHERE timestamp >= ? AND species IS NOT NULL
-                AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird', 'Poor Quality - Skipped')
-                GROUP BY species
-                HAVING total_predictions >= 5
-                ORDER BY total_predictions DESC
-            """, (start_date.strftime('%Y-%m-%d %H:%M:%S'),))
+            # This query now compares the AI's guess (ai_species) with the final human-verified species.
+            # It only includes records that have been human-verified (confidence = 1.0)
+            # and filters out non-bird/skipped classifications.
+            query = """
+                SELECT
+                    ai_species,
+                    species AS human_species
+                FROM bird_visits
+                WHERE timestamp >= ?
+                  AND confidence = 1.0
+                  AND ai_species IS NOT NULL
+                  AND species NOT IN ('Skip', 'Unknown Bird', 'Unknown; Not A Bird', 'Not A Bird', 'Poor Quality - Skipped')
+            """
             
+            cursor.execute(query, (start_date.strftime('%Y-%m-%d %H:%M:%S'),))
             results = cursor.fetchall()
             conn.close()
-            
+
             if not results:
-                print("❌ No recent bird visit data available")
+                print("❌ No human-verified records found in the last 30 days to analyze.")
                 return
-            
-            print(f"📊 Real-World Performance (Last 30 Days):")
-            print("Species                    | Total | Corrections | AI Accuracy | Avg AI Conf")
-            print("-" * 80)
-            
-            for species, total, corrections, avg_conf in results[:15]:  # Top 15 by frequency
-                correction_rate = corrections / total if total > 0 else 0
-                ai_accuracy = 1 - correction_rate
-                avg_conf = avg_conf or 0
-                
-                # Performance indicators
-                if ai_accuracy >= 0.8:
-                    perf_icon = "🔥"
-                elif ai_accuracy >= 0.6:
-                    perf_icon = "✅"
-                elif ai_accuracy >= 0.4:
-                    perf_icon = "⚠️"
+
+            # Process the results into a more usable format
+            performance_data = defaultdict(lambda: {'correct': 0, 'incorrect': 0, 'total': 0})
+            total_correct = 0
+            total_incorrect = 0
+
+            for ai_guess, human_label in results:
+                # Standardize for comparison
+                ai_guess_clean = ai_guess.strip().title()
+                human_label_clean = human_label.strip().title()
+
+                performance_data[human_label_clean]['total'] += 1
+                if ai_guess_clean == human_label_clean:
+                    performance_data[human_label_clean]['correct'] += 1
+                    total_correct += 1
                 else:
-                    perf_icon = "❌"
-                
-                print(f"{species[:25]:25} | {total:5d} | {corrections:11d} | {ai_accuracy:10.1%} {perf_icon} | {avg_conf:10.2f}")
+                    performance_data[human_label_clean]['incorrect'] += 1
+                    total_incorrect += 1
             
-            # Overall statistics
-            total_predictions = sum(r[1] for r in results)
-            total_corrections = sum(r[2] for r in results)
-            overall_ai_accuracy = 1 - (total_corrections / total_predictions) if total_predictions > 0 else 0
-            
-            print(f"\n🎯 Overall AI Performance:")
-            print(f"  Total predictions: {total_predictions}")
-            print(f"  Human corrections needed: {total_corrections}")
-            print(f"  AI accuracy rate: {overall_ai_accuracy:.1%}")
-            
+            total_predictions = total_correct + total_incorrect
+
+            print(f"📊 Species-Specific AI Accuracy (Human-Verified):")
+            print("Species                    | Correct | Incorrect | AI Accuracy")
+            print("-" * 80)
+
+            # Sort by the number of total observations for that species
+            sorted_species = sorted(performance_data.items(), key=lambda item: item[1]['total'], reverse=True)
+
+            for species, data in sorted_species[:15]: # Top 15 species
+                accuracy = data['correct'] / data['total'] if data['total'] > 0 else 0
+                perf_icon = "🔥" if accuracy >= 0.9 else "✅" if accuracy >= 0.75 else "⚠️" if accuracy >= 0.5 else "❌"
+                print(f"{species[:25]:25} | {data['correct']:7d} | {data['incorrect']:9d} | {accuracy:10.1%} {perf_icon}")
+
+            print("\n🎯 Overall AI Performance Summary:")
+            if total_predictions > 0:
+                overall_accuracy = total_correct / total_predictions
+                print(f"  Total Human-Verified Predictions: {total_predictions}")
+                print(f"  Correct AI Predictions:           {total_correct}")
+                print(f"  Incorrect AI Predictions:         {total_incorrect}")
+                print(f"  True AI Accuracy:                 {overall_accuracy:.1%}")
+            else:
+                print("  No data to calculate overall accuracy.")
+
         except Exception as e:
             print(f"❌ Error analyzing real-world performance: {e}")
     

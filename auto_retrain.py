@@ -69,7 +69,7 @@ class AutoRetrainer:
                 SELECT COUNT(*) FROM bird_visits 
                 WHERE species IS NOT NULL 
                 AND confidence = 1.0 
-                AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird')
+                AND species NOT IN ('Skip', 'Unknown Bird', 'Unknown; Not A Bird', 'Not A Bird', 'Poor Quality - Skipped')
                 AND timestamp > ?
             """, (db_format_date,))
         else:
@@ -77,7 +77,7 @@ class AutoRetrainer:
                 SELECT COUNT(*) FROM bird_visits 
                 WHERE species IS NOT NULL 
                 AND confidence = 1.0 
-                AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird')
+                AND species NOT IN ('Skip', 'Unknown Bird', 'Unknown; Not A Bird', 'Not A Bird', 'Poor Quality - Skipped')
             """)
         
         count = cursor.fetchone()[0]
@@ -95,7 +95,7 @@ class AutoRetrainer:
             FROM bird_visits 
             WHERE species IS NOT NULL 
             AND confidence = 1.0 
-            AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird')
+            AND species NOT IN ('Skip', 'Unknown Bird', 'Unknown; Not A Bird', 'Not A Bird', 'Poor Quality - Skipped')
             GROUP BY species 
             ORDER BY count DESC
         """)
@@ -121,9 +121,14 @@ class AutoRetrainer:
         try:
             self.logger.info("Starting model retraining...")
             
+            last_training_date = self.get_last_training_date()
+            command = ['./venv/bin/python', 'bird_trainer_enhanced_cnn.py']
+            if last_training_date:
+                command.extend(['--since-date', last_training_date])
+
             # Run the enhanced CNN training script
             result = subprocess.run(
-                ['./venv/bin/python', 'bird_trainer_enhanced_cnn.py'],
+                command,
                 capture_output=True,
                 text=True,
                 timeout=7200  # 2 hour timeout

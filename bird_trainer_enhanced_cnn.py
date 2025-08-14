@@ -45,6 +45,7 @@ import random
 import re
 import pytz
 from sklearn.utils import class_weight
+import argparse
 
 class WeightedDataGenerator(Sequence):
     def __init__(self, directory, image_paths, labels, class_indices, batch_size, target_size,
@@ -142,9 +143,11 @@ class WeightedDataGenerator(Sequence):
 
 class EnhancedBirdTrainerCNN:
     def __init__(self, db_path='fountain_buddy.db', images_dir='bird_images', 
-                 nabirds_clean_dir='nabirds_clean_training', unified_dir='training_data_enhanced_cnn'):
+                 nabirds_clean_dir='nabirds_clean_training', unified_dir='training_data_enhanced_cnn',
+                 since_date=None):
         self.db_path = db_path
         self.images_dir = images_dir
+        self.since_date = since_date
         self.nabirds_clean_dir = nabirds_clean_dir
         self.unified_dir = unified_dir
         self.model = None
@@ -236,15 +239,24 @@ class EnhancedBirdTrainerCNN:
         """Load human-verified corrections from database"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
-        cursor.execute("""
+
+        query = """
             SELECT species, image_path, timestamp FROM bird_visits 
-            WHERE species IS NOT NULL 
-            AND confidence = 1.0 
-            AND species NOT IN ('Unknown; Not A Bird', 'Not A Bird', 'skip')
+            WHERE confidence = 1.0 
+            AND species IS NOT NULL
             AND image_path IS NOT NULL
-        """)
-        
+            AND species NOT IN ('Skip', 'Unknown Bird', 'Unknown; Not A Bird', 'Not A Bird', 'Poor Quality - Skipped')
+        """
+        params = []
+
+        if self.since_date:
+            query += " AND timestamp > ?"
+            params.append(self.since_date)
+            print(f"✅ Loading human corrections since {self.since_date}...")
+        else:
+            print("✅ Loading all human corrections from history...")
+
+        cursor.execute(query, params)
         results = cursor.fetchall()
         conn.close()
         
@@ -253,110 +265,80 @@ class EnhancedBirdTrainerCNN:
     def create_enhanced_dataset(self):
         """Create unified dataset: clean NABirds foundation + human corrections"""
         print("🔄 Creating enhanced dataset with human corrections...")
-        
-        # Clear existing unified data
-        if os.path.exists(self.unified_dir):
-            shutil.rmtree(self.unified_dir)
-        os.makedirs(self.unified_dir, exist_ok=True)
-        
+
+        # If unified directory is empty, initialize it with the NABirds foundation
+        if not os.path.exists(self.unified_dir) or not any(Path(self.unified_dir).iterdir()):
+            print("✨ Initializing new enhanced dataset...")
+            if os.path.exists(self.unified_dir):
+                shutil.rmtree(self.unified_dir)
+            os.makedirs(self.unified_dir, exist_ok=True)
+
+            print("📚 Copying clean NABirds foundation...")
+            for species_dir in Path(self.nabirds_clean_dir).iterdir():
+                if species_dir.is_dir():
+                    dest_species_dir = Path(self.unified_dir) / species_dir.name
+                    shutil.copytree(species_dir, dest_species_dir, dirs_exist_ok=True)
+                    # Add 'nabirds_' prefix to all files for clear identification
+                    for img_file in dest_species_dir.glob('*.jpg'):
+                        if not img_file.name.startswith('nabirds_'):
+                            img_file.rename(dest_species_dir / f"nabirds_{img_file.name}")
+            print(f"✅ Foundation copied.")
+        else:
+            print("✅ Using existing enhanced dataset.")
+
         # Balancing parameters
         MAX_SAMPLES_PER_SPECIES = 150
         MIN_SAMPLES_PER_SPECIES = 20
-        NABIRDS_PRESERVATION_RATIO = 0.4 # Keep at least 40% of original NABirds images
-        
-        # Step 1: Start with clean NABirds foundation
-        print("📚 Starting with clean NABirds foundation...")
-        clean_stats = Counter()
-        
-        # Create species name mapping: database name (spaces) -> NABirds name (underscores)
-        species_mapping = {}
-        
-        for species_dir in Path(self.nabirds_clean_dir).iterdir():
-            if species_dir.is_dir():
-                nabirds_name = species_dir.name  # e.g., "Red-bellied_Woodpecker"
-                db_name = nabirds_name.replace('_', ' ')  # e.g., "Red-bellied Woodpecker"
-                species_mapping[db_name] = nabirds_name
-                
-                dest_species_dir = Path(self.unified_dir) / nabirds_name
-                dest_species_dir.mkdir(exist_ok=True)
-                
-                # Copy all NABirds images (already balanced at ~100 each)
-                img_files = list(species_dir.glob("*.jpg"))
-                print(f"📁 Processing {nabirds_name} (DB: {db_name}): found {len(img_files)} NABirds images")
-                
-                for img_file in img_files:
-                    try:
-                        if img_file.exists():
-                            # Don't add prefix if filename already starts with 'nabirds_'
-                            if img_file.name.startswith('nabirds_'):
-                                dest_path = dest_species_dir / img_file.name
-                            else:
-                                dest_path = dest_species_dir / f"nabirds_{img_file.name}"
-                            shutil.copy2(img_file, dest_path)
-                            clean_stats[nabirds_name] += 1
-                        else:
-                            print(f"⚠️ Source file does not exist: {img_file}")
-                    except Exception as e:
-                        print(f"⚠️ Failed to copy NABirds image {img_file}: {e}")
-                
-                if clean_stats[nabirds_name] == 0:
-                    print(f"⚠️ No images copied for {nabirds_name} - removing directory")
-                    if dest_species_dir.exists():
-                        dest_species_dir.rmdir()
-        
-        print(f"✅ Copied {sum(clean_stats.values())} clean NABirds images")
-        print(f"🗺️ Created species mapping for {len(species_mapping)} species")
-        
+        NABIRDS_PRESERVATION_RATIO = 0.4
+
         # Step 2: Add human corrections
-        print("👥 Adding human corrections...")
+        print(f"👥 Loading human corrections...")
         human_data = self.load_human_verified_data()
+        if not human_data:
+            print("No new human corrections to add.")
+        else:
+            print(f"Found {len(human_data)} new corrections to process.")
+
         human_stats = Counter()
-        self.human_correction_timestamps = {} # Reset for each run
-        
+        self.human_correction_timestamps = {}
+
+        # Create a species name mapping from the unified directory itself
+        species_mapping = {d.name.replace('_', ' '): d.name for d in Path(self.unified_dir).iterdir() if d.is_dir()}
+
         for species, image_path, timestamp in human_data:
             if not species or not image_path:
                 continue
-                
-            # Map database species name to NABirds directory name
-            if species in species_mapping:
+
+            if species not in species_mapping:
+                print(f"✨ New species detected: {species}. Creating new directory.")
+                nabirds_species_name = species.replace(' ', '_')
+                dest_species_dir = Path(self.unified_dir) / nabirds_species_name
+                dest_species_dir.mkdir(exist_ok=True)
+                species_mapping[species] = nabirds_species_name
+            else:
                 nabirds_species_name = species_mapping[species]
                 dest_species_dir = Path(self.unified_dir) / nabirds_species_name
-            else:
-                print(f"⚠️ Skipping {species} - not in clean foundation")
-                continue
-            
-            # Smart sample management for capped species
+
+            # Smart sample management
             current_files = list(dest_species_dir.glob("*.jpg"))
-            current_count = len(current_files)
-            
-            if current_count >= MAX_SAMPLES_PER_SPECIES:
-                # Smart replacement with diversity preservation
+            if len(current_files) >= MAX_SAMPLES_PER_SPECIES:
                 nabirds_files = [f for f in current_files if f.name.startswith('nabirds_')]
                 human_files = [f for f in current_files if f.name.startswith('human_')]
-                
-                num_nabirds_base = clean_stats.get(nabirds_species_name, 0)
-                min_nabirds_to_keep = int(num_nabirds_base * NABIRDS_PRESERVATION_RATIO)
+                min_nabirds_to_keep = int(len(nabirds_files) * NABIRDS_PRESERVATION_RATIO)
 
                 file_to_replace = None
                 if len(nabirds_files) > min_nabirds_to_keep:
-                    # Strategy 1: We have more NABirds images than the preservation threshold, so replace the oldest one.
                     file_to_replace = min(nabirds_files, key=lambda f: f.stat().st_mtime)
-                    print(f"🔄 {nabirds_species_name} at cap ({current_count}/{MAX_SAMPLES_PER_SPECIES})")
-                    print(f"   Replacing oldest NABirds image to improve specificity: {file_to_replace.name}")
                 elif human_files:
-                    # Strategy 2: We've hit the NABirds preservation floor. Replace the oldest human correction to keep the data fresh.
                     file_to_replace = min(human_files, key=lambda f: f.stat().st_mtime)
-                    print(f"🔄 {nabirds_species_name} at cap ({current_count}/{MAX_SAMPLES_PER_SPECIES})")
-                    print(f"   NABirds diversity preserved. Replacing oldest human image to keep data fresh: {file_to_replace.name}")
                 
                 if file_to_replace:
+                    print(f"🔄 {nabirds_species_name} at cap. Replacing oldest image: {file_to_replace.name}")
                     file_to_replace.unlink()
                 else:
-                    # This case happens if a species is capped with only preserved NABirds images and no human images to replace.
-                    print(f"⚠️ {nabirds_species_name} at cap, diversity preserved, and no human files to replace. Skipping.")
+                    print(f"⚠️ {nabirds_species_name} at cap, but no replaceable image found. Skipping.")
                     continue
-            
-            # Copy human correction using robust file resolution
+
             try:
                 resolved_path = self.resolve_image_path(image_path, species)
                 if resolved_path.exists():
@@ -364,46 +346,39 @@ class EnhancedBirdTrainerCNN:
                     dest_path = dest_species_dir / dest_filename
                     shutil.copy2(resolved_path, dest_path)
                     human_stats[nabirds_species_name] += 1
-                    # Store timestamp with the new path for weighting
                     self.human_correction_timestamps[str(dest_path)] = timestamp
                 else:
                     print(f"⚠️ Could not find image: {image_path} (resolved to: {resolved_path})")
             except Exception as e:
                 print(f"⚠️ Failed to copy {image_path}: {e}")
         
-        print(f"✅ Added {sum(human_stats.values())} human corrections (includes replacements for capped species)")
-        
-        # Step 3: Generate final stats
+        if sum(human_stats.values()) > 0:
+            print(f"✅ Added {sum(human_stats.values())} new human corrections.")
+
+        # Step 3: Generate final stats and prune
+        print("\n📊 Generating final dataset summary...")
         final_stats = {}
         for species_dir in Path(self.unified_dir).iterdir():
-            if species_dir.is_dir():
-                count = len(list(species_dir.glob("*.jpg")))
-                if count >= MIN_SAMPLES_PER_SPECIES:
-                    final_stats[species_dir.name] = count
-                else:
-                    print(f"⚠️ Removing {species_dir.name} - only {count} samples")
-                    shutil.rmtree(species_dir)
-        
-        # Report
-        print(f"\n📊 Enhanced Dataset Summary:")
-        print(f"Species: {len(final_stats)}")
-        print(f"Total images: {sum(final_stats.values())}")
-        
+            if not species_dir.is_dir(): continue
+            count = len(list(species_dir.glob("*.jpg")))
+            if count >= MIN_SAMPLES_PER_SPECIES:
+                final_stats[species_dir.name] = count
+            else:
+                print(f"🗑️ Pruning {species_dir.name} - only {count} samples (min is {MIN_SAMPLES_PER_SPECIES}).")
+                shutil.rmtree(species_dir)
+
+        print(f"\nEnhanced Dataset Summary:")
+        print(f"  Total Species: {len(final_stats)}")
+        print(f"  Total Images: {sum(final_stats.values())}")
+
         for species, count in sorted(final_stats.items()):
-            human_added = human_stats.get(species, 0)
-            nabirds_base = clean_stats.get(species, 0)
-            
-            # Count actual human vs nabirds files in final dataset
             species_dir = Path(self.unified_dir) / species
             actual_human = len(list(species_dir.glob("human_*.jpg")))
             actual_nabirds = len(list(species_dir.glob("nabirds_*.jpg")))
             human_ratio = actual_human / count if count > 0 else 0
-            
-            status = "CAPPED" if count >= MAX_SAMPLES_PER_SPECIES else "BALANCED"
-            quality_indicator = "🏆" if human_ratio > 0.3 else "⭐" if human_ratio > 0.1 else ""
-            
-            print(f"  {species.replace('_', ' '):25}: {count:3d} ({actual_nabirds}N + {actual_human}H = {human_ratio:.1%} human) [{status}] {quality_indicator}")
-        
+            status = "CAPPED" if count >= MAX_SAMPLES_PER_SPECIES else "OK"
+            print(f"  - {species.replace('_', ' '):<25} | {count:>4} images | {human_ratio:.1%} human-verified [{status}]")
+
         return final_stats
 
     def validate_training_data(self):
@@ -797,7 +772,12 @@ class EnhancedBirdTrainerCNN:
         return metadata
 
 def main():
-    trainer = EnhancedBirdTrainerCNN()
+    parser = argparse.ArgumentParser(description='Enhanced CNN Bird Trainer')
+    parser.add_argument('--since-date', type=str, default=None,
+                        help='Only train on human corrections since this date (ISO format string).')
+    args = parser.parse_args()
+
+    trainer = EnhancedBirdTrainerCNN(since_date=args.since_date)
     metadata = trainer.train_enhanced_model()
     
     if metadata:
