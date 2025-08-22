@@ -8,8 +8,7 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 ## 🎯 **NEW: Mac M4 Pro Performance Breakthrough**
 - **4x faster training**: 15 minutes vs 2+ hours on other platforms
 - **Apple Silicon optimization**: TensorFlow Metal GPU acceleration
-- **Seamless service management**: Native macOS launchd integration
-- **Production ready**: Auto-start, auto-restart, comprehensive logging
+
 
 ## ✨ Features
 
@@ -57,9 +56,6 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
    git clone https://github.com/yourusername/fountain-buddy.git
    cd fountain-buddy
    
-   # Check compatibility
-   python3 check_compatibility.py
-   
    # One-command setup (Mac with Apple Silicon optimization)
    ./setup-mac-py312.sh
    
@@ -68,6 +64,11 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
    source venv/bin/activate
    pip install -r requirements-mac.txt  # Mac
    pip install -r requirements.txt      # Linux
+   ```
+
+   Tip: after running the setup script once, reuse the existing environment with:
+   ```bash
+   source venv/bin/activate
    ```
 
 2. **Configure environment**
@@ -86,19 +87,9 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
    python discord_bot.py   # Terminal 2: Discord responses
    ```
 
-4. **Install as permanent services (macOS)**
-   ```bash
-   # Install both camera monitor + Discord bot as background services
-   ./services/service-install-all.sh
-   
-   # Check status
-   ./services/service-status-all.sh
-   
-   # View live logs
-   ./services/service-logs-all.sh
-   ```
-
-✅ **Services auto-start at login and restart on crashes!**
+4. **Keep it running**
+   - Use two terminals or a process manager (launchd/systemd/pm2) to keep `run.py` and `discord_bot.py` running.
+   - Service scripts are not included in this repo.
 
 ## 📦 Key Dependencies
 - **TensorFlow 2.16+** - Deep learning framework (Metal GPU acceleration on Apple Silicon)
@@ -115,20 +106,22 @@ Fountain Buddy is an intelligent bird monitoring system that combines computer v
 Create a `.env` file with the following settings:
 
 ```bash
-# Multi-Camera Configuration
-# Camera 1 - Fountain
-FOUNTAIN_CAMERA_IP=192.168.1.100
-FOUNTAIN_USERNAME=your_camera_username
-FOUNTAIN_PASSWORD=your_camera_password
-FOUNTAIN_RTSP_PORT=554
-FOUNTAIN_HTTP_PORT=80
+# Multi-Camera Configuration (recommended)
+# Camera 1 (e.g., fountain)
+CAMERA1_IP=192.168.1.100
+CAMERA1_USERNAME=your_camera_username
+CAMERA1_PASSWORD=your_camera_password
+CAMERA1_RTSP_PORT=554
+CAMERA1_HTTP_PORT=80
+CAMERA1_LOCATION=fountain
 
-# Camera 2 - Peanut Feeder (optional)
-PEANUT_CAMERA_IP=192.168.1.101
-PEANUT_USERNAME=your_camera_username
-PEANUT_PASSWORD=your_camera_password
-PEANUT_RTSP_PORT=554
-PEANUT_HTTP_PORT=80
+# Camera 2 (optional, e.g., peanut feeder)
+CAMERA2_IP=192.168.1.101
+CAMERA2_USERNAME=your_camera_username
+CAMERA2_PASSWORD=your_camera_password
+CAMERA2_RTSP_PORT=554
+CAMERA2_HTTP_PORT=80
+CAMERA2_LOCATION=peanut
 
 # Email Configuration
 SENDER_EMAIL=your_email@gmail.com
@@ -141,18 +134,28 @@ BIRD_CLASS_ID=14
 CONFIDENCE_THRESHOLD=0.25
 DETECTION_COOLDOWN_SECONDS=30
 
+# File Configuration
+IMAGE_DIR=bird_images
+
+# AI Model Configuration
+CUSTOM_MODEL_PATH=models/fountain_buddy_bird_classifier_unified.h5
+
 # Discord Configuration
 USE_DISCORD=true
 DISCORD_BOT_TOKEN=your_bot_token
 
-# Fountain Camera Discord
-DISCORD_WEBHOOK_FOUNTAIN=https://discord.com/api/webhooks/FOUNTAIN_WEBHOOK
-DISCORD_CHANNEL_FOUNTAIN_ID=fountain_channel_id
+# Camera webhooks (used for sending detections)
+DISCORD_WEBHOOK_CAMERA1=https://discord.com/api/webhooks/CAMERA1_WEBHOOK
+DISCORD_WEBHOOK_CAMERA2=https://discord.com/api/webhooks/CAMERA2_WEBHOOK
 
-# Peanut Camera Discord (optional)
-DISCORD_WEBHOOK_PEANUT=https://discord.com/api/webhooks/PEANUT_WEBHOOK
+# Discord Bot channel IDs (used for reading human responses)
+DISCORD_CHANNEL_FOUNTAIN_ID=fountain_channel_id
 DISCORD_CHANNEL_PEANUT_ID=peanut_channel_id
 ```
+
+Notes:
+- `camera_manager.py` supports both CAMERA1_/CAMERA2_ (recommended) and FOUNTAIN_/PEANUT_ variables for backward compatibility.
+- The Discord bot listens on `DISCORD_CHANNEL_FOUNTAIN_ID` and `DISCORD_CHANNEL_PEANUT_ID`.
 
 ### Discord Setup
 
@@ -162,12 +165,13 @@ DISCORD_CHANNEL_PEANUT_ID=peanut_channel_id
    - Enable "Message Content Intent"
 
 2. **Set up Webhook**
-   - Create webhook in your Discord channel
-   - Copy webhook URL to `DISCORD_WEBHOOK_PROD`
+   - Create separate webhooks in your two channels
+   - Set `DISCORD_WEBHOOK_CAMERA1` and `DISCORD_WEBHOOK_CAMERA2` to those URLs
 
 3. **Invite Bot**
    - Generate OAuth2 URL with "Send Messages" and "Read Message History" permissions
    - Invite bot to your server
+   - Find your channel IDs and set `DISCORD_CHANNEL_FOUNTAIN_ID` and `DISCORD_CHANNEL_PEANUT_ID`
 
 ## 📱 Usage
 
@@ -327,24 +331,15 @@ Monitor how your corrections improve dataset quality:
 - **`custom_bird_classifier.py`** - Enhanced classifier with automatic model selection
 - **`auto_retrain.py`** - Automated retraining trigger system
 
-#### 📱 **Service Management (macOS)**
-- **`services/service-install-all.sh`** - Install both services as background daemons
-- **`services/service-status-all.sh`** - Check status of both services
-- **`services/service-start-all.sh`** / **`services/service-stop-all.sh`** - Control services
-- **`services/service-logs-all.sh`** - View logs from both services
-- **`services/service-uninstall-all.sh`** - Remove services completely
-
 #### 🛠 **Setup and Compatibility**
 - **`setup-mac-py312.sh`** - One-command Mac setup with Apple Silicon optimization
-- **`check_compatibility.py`** - System compatibility verification
 - **`requirements-mac.txt`** - Mac-optimized dependencies with TensorFlow Metal support
-- **`README-SERVICE.md`** - Complete service management guide
+- **`requirements.txt`** - Standard requirements
+- **`.env.example`** - Configuration template
 
 #### 🔧 **Core Infrastructure**
 - **`camera_manager.py`** - Multi-camera management and location-aware processing
-- **`species_mapping.py`** - Species classification and location mapping
 - **`photo_organizer.py`** - Location-aware photo organization
-- **`training_improvements_summary.py`** - Training performance tracking
 
 
 ### Database Schema
@@ -380,12 +375,6 @@ fountain-buddy/
 │   ├── custom_bird_classifier.py      # Enhanced classifier
 │   └── train_clean_optimized_cnn.py   # Base CNN trainer
 │
-├── 📱 SERVICE MANAGEMENT (macOS)
-│   └── services/                      # Service scripts and configs
-│       ├── service-*-all.sh           # Batch service management
-│       ├── service-*.sh               # Individual service control
-│       └── *.plist                    # Service configurations
-│
 ├── 🛠 SETUP & CONFIG
 │   ├── setup-mac-py312.sh            # One-command Mac setup
 │   ├── requirements-mac.txt          # Mac-optimized dependencies
@@ -401,8 +390,6 @@ fountain-buddy/
 │   └── fountain_buddy.db             # SQLite database
 │
 └── 📚 DOCUMENTATION
-    ├── memory-bank/                  # Project evolution docs
-    ├── README-SERVICE.md             # Service management guide
     └── README.md                     # This file
 ```
 

@@ -640,15 +640,16 @@ class EnhancedBirdTrainerCNN:
         class_weights_dict = dict(enumerate(class_weights))
         print(f"⚖️ Applying combined sample and class weights to handle data imbalance and recency.")
 
-        # Setup data augmentor for training
+        # Setup data augmentor for training - REDUCED augmentation to match inference
+        # Aggressive augmentation was causing domain mismatch with real camera images
         train_augmentor = ImageDataGenerator(
-            rotation_range=30,
-            width_shift_range=0.25,
-            height_shift_range=0.25,
-            horizontal_flip=True,
-            zoom_range=0.2,
-            shear_range=0.15,
-            brightness_range=[0.8, 1.2]
+            rotation_range=5,        # Reduced from 30° to 5°
+            width_shift_range=0.05,  # Reduced from 0.25 to 0.05
+            height_shift_range=0.05, # Reduced from 0.25 to 0.05
+            horizontal_flip=True,    # Keep - birds can face either direction
+            zoom_range=0.05,         # Reduced from 0.2 to 0.05
+            # Removed shear_range=0.15 - too aggressive
+            brightness_range=[0.95, 1.05]  # Reduced from [0.8, 1.2] to [0.95, 1.05]
         )
 
         # Create weighted generators, passing the class_weights_dict

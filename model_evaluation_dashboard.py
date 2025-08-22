@@ -200,13 +200,12 @@ class ModelEvaluationDashboard:
             
             start_date = datetime.now() - timedelta(days=30)
             
-            # This query now compares the AI's guess (ai_species) with the final human-verified species.
-            # It only includes records that have been human-verified (confidence = 1.0)
-            # and filters out non-bird/skipped classifications.
+            # Get all AI predictions that were human-verified (corrected or confirmed)
             query = """
                 SELECT
                     ai_species,
-                    species AS human_species
+                    species AS human_species,
+                    timestamp
                 FROM bird_visits
                 WHERE timestamp >= ?
                   AND confidence = 1.0
@@ -215,10 +214,21 @@ class ModelEvaluationDashboard:
             """
             
             cursor.execute(query, (start_date.strftime('%Y-%m-%d %H:%M:%S'),))
-            results = cursor.fetchall()
+            verified_results = cursor.fetchall()
+            
+            # Also get total AI predictions (including unverified ones)
+            total_query = """
+                SELECT COUNT(*) FROM bird_visits
+                WHERE timestamp >= ?
+                  AND ai_species IS NOT NULL
+                  AND ai_species != 'Unknown Bird'
+            """
+            cursor.execute(total_query, (start_date.strftime('%Y-%m-%d %H:%M:%S'),))
+            total_ai_predictions = cursor.fetchone()[0]
+            
             conn.close()
 
-            if not results:
+            if not verified_results:
                 print("❌ No human-verified records found in the last 30 days to analyze.")
                 return
 
@@ -227,7 +237,7 @@ class ModelEvaluationDashboard:
             total_correct = 0
             total_incorrect = 0
 
-            for ai_guess, human_label in results:
+            for ai_guess, human_label, timestamp in verified_results:
                 # Standardize for comparison
                 ai_guess_clean = ai_guess.strip().title()
                 human_label_clean = human_label.strip().title()
@@ -240,9 +250,10 @@ class ModelEvaluationDashboard:
                     performance_data[human_label_clean]['incorrect'] += 1
                     total_incorrect += 1
             
-            total_predictions = total_correct + total_incorrect
+            total_verified = total_correct + total_incorrect
+            verification_rate = (total_verified / total_ai_predictions * 100) if total_ai_predictions > 0 else 0
 
-            print(f"📊 Species-Specific AI Accuracy (Human-Verified):")
+            print(f"📊 Species-Specific AI Accuracy (Human-Verified Only):")
             print("Species                    | Correct | Incorrect | AI Accuracy")
             print("-" * 80)
 
@@ -254,13 +265,16 @@ class ModelEvaluationDashboard:
                 perf_icon = "🔥" if accuracy >= 0.9 else "✅" if accuracy >= 0.75 else "⚠️" if accuracy >= 0.5 else "❌"
                 print(f"{species[:25]:25} | {data['correct']:7d} | {data['incorrect']:9d} | {accuracy:10.1%} {perf_icon}")
 
-            print("\n🎯 Overall AI Performance Summary:")
-            if total_predictions > 0:
-                overall_accuracy = total_correct / total_predictions
-                print(f"  Total Human-Verified Predictions: {total_predictions}")
-                print(f"  Correct AI Predictions:           {total_correct}")
-                print(f"  Incorrect AI Predictions:         {total_incorrect}")
-                print(f"  True AI Accuracy:                 {overall_accuracy:.1%}")
+            print("\n🎯 AI Performance Summary (Verified Subset Only):")
+            if total_verified > 0:
+                overall_accuracy = total_correct / total_verified
+                print(f"  Total AI Predictions (30 days):      {total_ai_predictions}")
+                print(f"  Human-Verified Predictions:          {total_verified} ({verification_rate:.1f}% coverage)")
+                print(f"  Correct AI Predictions (verified):   {total_correct}")
+                print(f"  Incorrect AI Predictions (verified): {total_incorrect}")
+                print(f"  AI Accuracy (verified subset):       {overall_accuracy:.1%}")
+                print(f"\n⚠️  Note: {total_ai_predictions - total_verified} predictions remain unverified")
+                print(f"    Real accuracy may be lower if unverified predictions are mostly wrong")
             else:
                 print("  No data to calculate overall accuracy.")
 

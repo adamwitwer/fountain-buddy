@@ -71,7 +71,6 @@ ACTIVE_IMAGE_DIR = os.path.join(IMAGE_DIR, "active")
 DISCORD_WEBHOOK_TEST = os.getenv("DISCORD_WEBHOOK_TEST")
 DISCORD_WEBHOOK_PROD = os.getenv("DISCORD_WEBHOOK_PROD")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID")  # Channel ID for production
 USE_DISCORD = os.getenv("USE_DISCORD", "false").lower() == "true"
 
 # --- Global Variables for Token Management ---
@@ -704,18 +703,19 @@ def classify_bird_species(image_crop, camera_location='fountain'):
             species_name = result['species']
             confidence = result['confidence']
             
-            # Optional: Add a confidence threshold
-            if confidence > 0.15:
-                print(f"Custom classifier ({camera_location}): {species_name} ({confidence:.2f})")
+            # Lower confidence threshold to ensure model is actually used
+            if confidence > 0.05:  # Lowered from 0.15 to 0.05
+                print(f"🤖 Custom classifier ({camera_location}): {species_name} ({confidence:.3f})")
                 return species_name, confidence
             else:
-                print(f"Low confidence ({confidence:.2f}) for {species_name}. Reporting as Unknown Bird.")
+                print(f"⚠️ Low confidence ({confidence:.3f}) for {species_name}. Reporting as Unknown Bird.")
                 return "Unknown Bird", confidence
                 
     except Exception as e:
-        print(f"Custom classifier error: {e}")
+        print(f"❌ Custom classifier error: {e}")
     
     # Fallback if model not loaded or error occurs
+    print(f"❌ Custom model not loaded, returning Unknown Bird")
     return "Unknown Bird", 0.0
 
 def is_bird_species(label):

@@ -33,8 +33,9 @@ import cv2
 
 class CustomBirdClassifier:
     def __init__(self, model_path=None, metadata_path=None):
-        # Use the enhanced NABirds CNN model by default
+        """Initialize the custom bird classifier"""
         if model_path is None:
+            # Use the enhanced CNN model by default
             self.model_path = 'models/enhanced_nabirds_cnn.keras'
             self.metadata_path = 'models/enhanced_nabirds_cnn_metadata.json'
             self.model_version = "enhanced_cnn"
@@ -47,6 +48,7 @@ class CustomBirdClassifier:
         self.model = None
         self.class_names = None
         self.is_loaded = False
+        self.last_model_mtime = None  # Track model file modification time
         
     def load_model(self):
         """Load the trained bird classifier model"""
@@ -68,6 +70,9 @@ class CustomBirdClassifier:
             
             self.class_names = metadata['class_names']
             self.is_loaded = True
+            
+            # Track model file modification time for hot reloading
+            self.last_model_mtime = os.path.getmtime(self.model_path)
             
             version_info = f" ({self.model_version})" if hasattr(self, 'model_version') else ""
             print(f"Loaded custom bird classifier{version_info} with {len(self.class_names)} species:")
@@ -120,7 +125,7 @@ class CustomBirdClassifier:
         # Get top 3 predictions
         top_3_idx = np.argsort(predictions[0])[-3:][::-1]
         top_3_predictions = [
-            (self.class_names[idx], predictions[0][idx])
+            (self.class_names[idx], float(predictions[0][idx]))
             for idx in top_3_idx
         ]
         
@@ -130,26 +135,44 @@ class CustomBirdClassifier:
             'top_3': top_3_predictions
         }
     
-    def predict_with_fallback(self, image, fallback_func=None):
-        """Predict with fallback to Unknown Bird (ImageNet disabled)"""
-        try:
-            if self.is_loaded:
-                result = self.predict(image)
-                
-                # If confidence is high enough, return custom model result
-                if result['confidence'] > 0.15:
-                    return result['species'], result['confidence']
-                else:
-                    # Low confidence - return Unknown Bird instead of ImageNet fallback
-                    return "Unknown Bird", result['confidence']
+    def check_for_model_updates(self):
+        """Check if model file has been updated and reload if necessary"""
+        if not os.path.exists(self.model_path):
+            return False
             
-            # No custom model available
+        current_mtime = os.path.getmtime(self.model_path)
+        
+        # If model file is newer than our loaded version, reload
+        if self.last_model_mtime is None or current_mtime > self.last_model_mtime:
+            print(f"🔄 Model file updated, hot reloading {self.model_path}...")
+            return self.load_model()
+            
+        return True
+    
+    def predict_with_fallback(self, image):
+        """Predict bird species with fallback to Unknown Bird"""
+        # Check for model updates before prediction
+        if not self.check_for_model_updates():
+            print("⚠️ Custom model not loaded or failed to reload, falling back to Unknown Bird")
             return "Unknown Bird", 0.0
+        
+        try:
+            prediction = self.predict(image)
+            species = prediction.get('species')
+            confidence = float(prediction.get('confidence', 0.0))
+            
+            # Apply confidence threshold - lowered from 0.15 to 0.05
+            if confidence < 0.05:
+                print(f"🔄 Custom model prediction below threshold: {species} ({confidence:.3f}) → Unknown Bird")
+                return "Unknown Bird", 0.0
+            
+            print(f"✅ Custom model prediction: {species} (confidence: {confidence:.3f})")
+            return species, confidence
             
         except Exception as e:
-            print(f"Error in custom classifier: {e}")
+            print(f"❌ Custom model prediction failed: {e} → Unknown Bird")
             return "Unknown Bird", 0.0
-    
+
 
 def integrate_with_main_app():
     """Integration instructions for the main application"""
@@ -192,7 +215,7 @@ def integrate_with_main_app():
            
            if new_corrections >= 20:  # Retrain every 20 new corrections
                print("Triggering model retraining...")
-               os.system("./venv/bin/python bird_trainer.py")
+               os.system("./venv/bin/python bird_trainer_enhanced_cnn.py")
     
     5. Add retraining check to your daily summary or main loop
     """
@@ -207,5 +230,5 @@ if __name__ == "__main__":
         print("Custom bird classifier loaded successfully!")
         # You can test with: result = classifier.predict("path/to/bird/image.jpg")
     else:
-        print("Custom classifier not available. Run bird_trainer.py first.")
+        print("Custom classifier not available. Run bird_trainer_enhanced_cnn.py first.")
         integrate_with_main_app()

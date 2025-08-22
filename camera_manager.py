@@ -366,36 +366,68 @@ def create_camera_managers() -> Dict[str, CameraManager]:
     
     cameras = {}
     
-    # Fountain Camera
-    fountain_config = {
-        'ip': os.getenv('FOUNTAIN_CAMERA_IP'),
-        'username': os.getenv('FOUNTAIN_USERNAME'),
-        'password': os.getenv('FOUNTAIN_PASSWORD'),
-        'rtsp_port': int(os.getenv('FOUNTAIN_RTSP_PORT', 554)),
-        'http_port': int(os.getenv('FOUNTAIN_HTTP_PORT', 80)),
-        'webhook_url': os.getenv('DISCORD_WEBHOOK_FOUNTAIN'),
-        'channel_id': os.getenv('DISCORD_CHANNEL_FOUNTAIN_ID'),
-        'common_birds': FOUNTAIN_BIRDS
+    # --- Read generic CAMERA1_/CAMERA2_ values for backwards compatibility ---
+    cam1 = {
+        'ip': os.getenv('CAMERA1_IP'),
+        'username': os.getenv('CAMERA1_USERNAME'),
+        'password': os.getenv('CAMERA1_PASSWORD'),
+        'rtsp_port': int(os.getenv('CAMERA1_RTSP_PORT', 554)),
+        'http_port': int(os.getenv('CAMERA1_HTTP_PORT', 80)),
+        'location': (os.getenv('CAMERA1_LOCATION') or 'fountain').strip().lower(),
+        'webhook_url': os.getenv('DISCORD_WEBHOOK_CAMERA1'),
+        'channel_id': os.getenv('DISCORD_CHANNEL_CAMERA1_ID')
+    }
+    cam2 = {
+        'ip': os.getenv('CAMERA2_IP'),
+        'username': os.getenv('CAMERA2_USERNAME'),
+        'password': os.getenv('CAMERA2_PASSWORD'),
+        'rtsp_port': int(os.getenv('CAMERA2_RTSP_PORT', 554)),
+        'http_port': int(os.getenv('CAMERA2_HTTP_PORT', 80)),
+        'location': (os.getenv('CAMERA2_LOCATION') or 'peanut').strip().lower(),
+        'webhook_url': os.getenv('DISCORD_WEBHOOK_CAMERA2'),
+        'channel_id': os.getenv('DISCORD_CHANNEL_CAMERA2_ID')
     }
     
-    if all([fountain_config['ip'], fountain_config['username'], fountain_config['password']]):
+    # Helper to build config dict
+    def build_config(ip, username, password, rtsp_port, http_port, webhook_url, channel_id, location):
+        birds = FOUNTAIN_BIRDS if location == 'fountain' else (PEANUT_BIRDS if location == 'peanut' else {})
+        return {
+            'ip': ip,
+            'username': username,
+            'password': password,
+            'rtsp_port': rtsp_port,
+            'http_port': http_port,
+            'webhook_url': webhook_url,
+            'channel_id': channel_id,
+            'common_birds': birds
+        }
+    
+    # --- Fountain camera: prefer explicit FOUNTAIN_* envs, else map from CAMERA1_/CAMERA2_ by location ---
+    f_ip = os.getenv('FOUNTAIN_CAMERA_IP') or (cam1['ip'] if cam1['location'] == 'fountain' else (cam2['ip'] if cam2['location'] == 'fountain' else None))
+    f_username = os.getenv('FOUNTAIN_USERNAME') or (cam1['username'] if cam1['location'] == 'fountain' else (cam2['username'] if cam2['location'] == 'fountain' else None))
+    f_password = os.getenv('FOUNTAIN_PASSWORD') or (cam1['password'] if cam1['location'] == 'fountain' else (cam2['password'] if cam2['location'] == 'fountain' else None))
+    f_rtsp = int(os.getenv('FOUNTAIN_RTSP_PORT', cam1['rtsp_port'] if cam1['location'] == 'fountain' else (cam2['rtsp_port'] if cam2['location'] == 'fountain' else 554)))
+    f_http = int(os.getenv('FOUNTAIN_HTTP_PORT', cam1['http_port'] if cam1['location'] == 'fountain' else (cam2['http_port'] if cam2['location'] == 'fountain' else 80)))
+    f_webhook = os.getenv('DISCORD_WEBHOOK_FOUNTAIN') or (cam1['webhook_url'] if cam1['location'] == 'fountain' else (cam2['webhook_url'] if cam2['location'] == 'fountain' else None))
+    f_channel = os.getenv('DISCORD_CHANNEL_FOUNTAIN_ID') or (cam1['channel_id'] if cam1['location'] == 'fountain' else (cam2['channel_id'] if cam2['location'] == 'fountain' else None))
+    
+    if all([f_ip, f_username, f_password]):
+        fountain_config = build_config(f_ip, f_username, f_password, f_rtsp, f_http, f_webhook, f_channel, 'fountain')
         cameras['fountain'] = CameraManager('fountain', 'fountain', fountain_config)
     else:
         print("⚠️ Fountain camera configuration incomplete")
     
-    # Peanut Camera
-    peanut_config = {
-        'ip': os.getenv('PEANUT_CAMERA_IP'),
-        'username': os.getenv('PEANUT_USERNAME'),
-        'password': os.getenv('PEANUT_PASSWORD'),
-        'rtsp_port': int(os.getenv('PEANUT_RTSP_PORT', 554)),
-        'http_port': int(os.getenv('PEANUT_HTTP_PORT', 80)),
-        'webhook_url': os.getenv('DISCORD_WEBHOOK_PEANUT'),
-        'channel_id': os.getenv('DISCORD_CHANNEL_PEANUT_ID'),
-        'common_birds': PEANUT_BIRDS
-    }
+    # --- Peanut camera: prefer explicit PEANUT_* envs, else map from CAMERA1_/CAMERA2_ by location ---
+    p_ip = os.getenv('PEANUT_CAMERA_IP') or (cam1['ip'] if cam1['location'] == 'peanut' else (cam2['ip'] if cam2['location'] == 'peanut' else None))
+    p_username = os.getenv('PEANUT_USERNAME') or (cam1['username'] if cam1['location'] == 'peanut' else (cam2['username'] if cam2['location'] == 'peanut' else None))
+    p_password = os.getenv('PEANUT_PASSWORD') or (cam1['password'] if cam1['location'] == 'peanut' else (cam2['password'] if cam2['location'] == 'peanut' else None))
+    p_rtsp = int(os.getenv('PEANUT_RTSP_PORT', cam1['rtsp_port'] if cam1['location'] == 'peanut' else (cam2['rtsp_port'] if cam2['location'] == 'peanut' else 554)))
+    p_http = int(os.getenv('PEANUT_HTTP_PORT', cam1['http_port'] if cam1['location'] == 'peanut' else (cam2['http_port'] if cam2['location'] == 'peanut' else 80)))
+    p_webhook = os.getenv('DISCORD_WEBHOOK_PEANUT') or (cam1['webhook_url'] if cam1['location'] == 'peanut' else (cam2['webhook_url'] if cam2['location'] == 'peanut' else None))
+    p_channel = os.getenv('DISCORD_CHANNEL_PEANUT_ID') or (cam1['channel_id'] if cam1['location'] == 'peanut' else (cam2['channel_id'] if cam2['location'] == 'peanut' else None))
     
-    if all([peanut_config['ip'], peanut_config['username'], peanut_config['password']]):
+    if all([p_ip, p_username, p_password]):
+        peanut_config = build_config(p_ip, p_username, p_password, p_rtsp, p_http, p_webhook, p_channel, 'peanut')
         cameras['peanut'] = CameraManager('peanut', 'peanut', peanut_config)
     else:
         print("⚠️ Peanut camera configuration incomplete")
