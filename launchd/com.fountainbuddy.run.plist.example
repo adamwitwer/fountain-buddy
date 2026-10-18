@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for the Fountain Buddy LaunchAgent. launchd/install.sh fills in __REPO__ and
+  __HOME__ and installs it to ~/Library/LaunchAgents/com.fountainbuddy.run.plist.
+
+  NEVER put secrets here (v1 leaked every secret this way, 2025-08-03). The service reads
+  .env from the repo at runtime.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fountainbuddy.run</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO__/.venv/bin/python</string>
+        <string>-m</string>
+        <string>fountain_buddy</string>
+        <string>run</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <!-- launchd opens these itself before exec, so keep them off the external volume. -->
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/fountain-buddy.launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/fountain-buddy.launchd.log</string>
+</dict>
+</plist>

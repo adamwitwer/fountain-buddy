@@ -23,6 +23,8 @@ POLL_SECONDS = 3
 RESUBSCRIBE_SECONDS = 60
 BURST = 4
 BURST_GAP_SECONDS = 0.6
+# A connect can hang rather than fail (seen 2026-10-18 when macOS blocked LAN access).
+CONNECT_TIMEOUT_SECONDS = 60
 
 
 class Camera:
@@ -33,6 +35,9 @@ class Camera:
         self._motion = asyncio.Event()
 
     async def connect(self) -> None:
+        await asyncio.wait_for(self._connect(), CONNECT_TIMEOUT_SECONDS)
+
+    async def _connect(self) -> None:
         await self.host.get_host_data()
         self.host.baichuan.register_callback("fountain-buddy", self._on_push)
         await self.host.baichuan.subscribe_events()

@@ -145,3 +145,23 @@ def test_summary(tmp_path):
     assert "Northern Cardinal: 1" in text and "agreed with you on 1/2" in text
     assert "1 still unanswered" in text
     assert summary_text(store, dt.date(2026, 10, 20)) is None
+
+
+def test_camera_connect_times_out_instead_of_hanging(monkeypatch):
+    import pytest
+
+    from fountain_buddy import camera
+
+    monkeypatch.setattr(camera, "CONNECT_TIMEOUT_SECONDS", 0.05)
+
+    async def go():
+        cam = camera.Camera("192.0.2.1", "user", "pass")  # TEST-NET-1: never reachable
+
+        async def hang():
+            await asyncio.sleep(10)
+
+        cam.host.get_host_data = hang
+        with pytest.raises(TimeoutError):
+            await cam.connect()
+
+    asyncio.run(go())

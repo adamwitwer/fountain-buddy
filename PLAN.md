@@ -160,8 +160,16 @@ git ever tracks an image, database, `.env` or plist.
 
 ### Phase 6: Run for real
 
-- [ ] launchd plist (secrets read from `.env` at runtime and never written into the plist),
-      healthchecks.io, camera-down alert, smoke test, deploy notes in AGENTS.md.
+- [x] LaunchAgent `com.fountainbuddy.run` via `launchd/install.sh` (template has no
+      secrets). Live since 2026-10-18 16:19. Crash recovery verified: back 31 s after
+      `kill -9`.
+- [x] macOS permissions granted for Homebrew python3.13: Removable Volumes and Local
+      Network (see AGENTS.md "Deploying").
+- [x] Camera-down alert in Discord after 15 min. Camera connect times out (60 s) instead
+      of hanging.
+- [x] Deploy notes in AGENTS.md.
+- [ ] healthchecks.io: Adam creates a check and sets `HEALTHCHECK_URL` in `.env`
+      (pings every 5 min; `/fail` when the camera or Discord is down).
 
 ## Open questions
 

@@ -9,6 +9,7 @@ import datetime as dt
 import json
 import logging
 import logging.handlers
+import sys
 import time
 import urllib.request
 from collections import Counter
@@ -42,6 +43,8 @@ def setup_logging(cfg: Settings) -> None:
         logs / "fountain-buddy.log", maxBytes=5_000_000, backupCount=5
     )
     console = logging.StreamHandler()
+    # Under launchd stderr is a file that never rotates; keep it to warnings and up.
+    console.setLevel(logging.INFO if sys.stderr.isatty() else logging.WARNING)
     for handler in (file, console):
         handler.setFormatter(fmt)
     root = logging.getLogger()

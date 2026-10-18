@@ -26,9 +26,11 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 - **The tray feeder was installed 2026-10-18.** Birds take days to discover a new
   feeder, so a quiet first few days is expected, not a fault. Camera motion detection is
   at maximum sensitivity (sensDef 1, i.e. 50/50 in the app) over the whole frame.
-- Phase 4: built and live since 2026-10-18 15:09, but run from a Claude session, not
-  launchd yet. Next: check Adam's first taps, swap in the fine-tuned detector if it wins,
-  then Phase 6 (launchd), then Phase 5 (learning loop).
+- Phase 4: done. Adam's first tap (on a TEST post) and a hand-wave motion test both
+  worked end to end on 2026-10-18.
+- Phase 6: live under launchd since 2026-10-18 16:19 (see "Deploying"). Still open:
+  healthchecks.io URL.
+- Next: swap in the fine-tuned detector if it wins, then Phase 5 (learning loop).
 
 ## Commands
 
@@ -44,6 +46,35 @@ uv run pytest                    # run before every commit
 uv run ruff check . && uv run ruff format --check .
 git config core.hooksPath .githooks   # once per clone: the secrets/data guard
 ```
+
+## Deploying (Mini M4 Pro, LaunchAgent)
+
+```bash
+launchd/install.sh               # install, or reinstall after a code change (restarts it)
+launchctl kickstart -k gui/$(id -u)/com.fountainbuddy.run   # restart only
+launchctl print gui/$(id -u)/com.fountainbuddy.run | grep -E 'state|pid|runs|last exit'
+launchd/install.sh uninstall
+```
+
+- App log: `data/logs/fountain-buddy.log` (rotating). launchd's own log
+  (`~/Library/Logs/fountain-buddy.launchd.log`) gets warnings and up only.
+- **A deploy isn't done until a fresh `service: running` line appears** after the restart.
+  Check the log, not just `launchctl print`: under a pending permission prompt the process
+  shows `state = running` while doing nothing.
+- **Two macOS permissions are needed, and both attach to Homebrew's python binary**
+  (`/opt/homebrew/Cellar/python@3.13/3.13.15/...`, which `.venv` points to):
+  1. *Removable Volumes*, because the repo is on the external `Envoy` drive. Without it
+     the process blocks silently at startup (TCC `AUTHREQ_PROMPTING` in
+     `log show --predicate 'subsystem == "com.apple.TCC"'`) and writes nothing.
+  2. *Local Network*, to reach the camera. Without it the camera connect fails with
+     `[Errno 65] No route to host`.
+  A `brew upgrade` that moves python to a new Cellar path will prompt again and pause
+  the service until someone clicks Allow on the Mini. After any Python upgrade, re-run
+  `uv sync`, `launchd/install.sh`, and check for the `service: running` line.
+- It is a LaunchAgent (runs in Adam's login session). With FileVault on, nothing could
+  start before login anyway, so after a power cut it starts once Adam logs in.
+- Only one copy may run. Two would double-post and fight over button taps, so stop any
+  `fountain-buddy run` in a terminal before installing.
 
 ## Conventions
 

@@ -28,6 +28,8 @@ uv run pytest
 
 Photos, the database and trained models live in `data/`, which git never tracks.
 
+To run it as a service on the Mac: `launchd/install.sh` (see AGENTS.md, "Deploying").
+
 ## Hardware
 
 - Reolink RLC-810WA (4K, Wi-Fi) aimed at a safflower tray feeder.
