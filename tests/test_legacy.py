@@ -20,6 +20,7 @@ def _frame_with_box(box, foliage=False):
 def test_find_drawn_box_through_jpeg():
     found = legacy.find_drawn_box(_frame_with_box((400, 200, 640, 380)))
     assert found is not None
+    assert all(type(v) is int for v in found)  # numpy ints become BLOBs in SQLite
     assert all(abs(a - b) <= 2 for a, b in zip(found, (400, 200, 640, 380), strict=True))
 
 
@@ -83,3 +84,11 @@ def test_import_visits(tmp_path):
     assert path == "images/active/a.jpg"
 
     assert legacy.import_visits(old, store)["skipped"] == 4  # idempotent
+
+
+def test_iou():
+    from fountain_buddy.detect import iou
+
+    assert iou((0, 0, 10, 10), (0, 0, 10, 10)) == 1.0
+    assert iou((0, 0, 10, 10), (20, 20, 30, 30)) == 0.0
+    assert abs(iou((0, 0, 10, 10), (5, 0, 15, 10)) - 1 / 3) < 1e-9

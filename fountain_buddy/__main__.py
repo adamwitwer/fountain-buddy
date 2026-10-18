@@ -52,14 +52,17 @@ def import_legacy() -> int:
     return 0
 
 
-def bakeoff(models: list[str]) -> int:
+def bakeoff(models: list[str], detectors: bool = False) -> int:
     import datetime as dt
 
     from fountain_buddy import bakeoff as bake
 
     cfg = settings()
-    text = bake.run(cfg.db_path, cfg.data_dir, models)
-    out = cfg.data_dir / "reports" / f"bakeoff-{dt.date.today().isoformat()}.md"
+    if detectors:
+        text, stem = bake.detection_recall(cfg.db_path, cfg.data_dir), "detectors"
+    else:
+        text, stem = bake.run(cfg.db_path, cfg.data_dir, models), "bakeoff"
+    out = cfg.data_dir / "reports" / f"{stem}-{dt.date.today().isoformat()}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text)
     print(text)
@@ -76,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
     p.add_argument("--models", nargs="+", default=["bioclip2", "dinov3-l", "dinov3-b"])
+    p.add_argument("--detectors", action="store_true", help="compare detectors instead")
     args = parser.parse_args(argv)
 
     if args.command == "check":
@@ -83,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "import-legacy":
         return import_legacy()
     if args.command == "bakeoff":
-        return bakeoff(args.models)
+        return bakeoff(args.models, args.detectors)
     return 2
 
 

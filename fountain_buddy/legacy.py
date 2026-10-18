@@ -115,7 +115,8 @@ def find_drawn_box(img: np.ndarray) -> tuple[int, int, int, int] | None:
         span = sub[top : bottom + 1]
         if span[:, left].mean() < 0.8 or span[:, right].mean() < 0.8:
             continue
-        box = (x + left, y + top, x + right, y + bottom)
+        # Plain ints: SQLite stores numpy integers as 8-byte BLOBs.
+        box = tuple(int(v) for v in (x + left, y + top, x + right, y + bottom))
         box_area = (box[2] - box[0]) * (box[3] - box[1])
         if box_area > best_area:
             best, best_area = box, box_area

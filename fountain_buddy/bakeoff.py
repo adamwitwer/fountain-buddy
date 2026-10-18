@@ -190,3 +190,58 @@ def report(rows, train, test, results, store: Path) -> str:
     for label, (recall, n) in sorted(results[best]["per_class"].items(), key=lambda kv: -kv[1][1]):
         lines.append(f"| {label} | {recall:.1%} | {n} |")
     return "\n".join(lines) + "\n"
+
+
+DETECTOR_CONFIGS = (
+    ("yolov8n.pt", 640),  # v1's detector
+    ("yolo26n.pt", 640),
+    ("yolo26s.pt", 640),
+    ("yolo26s.pt", 1280),
+    ("yolo26m.pt", 1280),
+)
+
+
+def detection_recall(store: Path, data_dir: Path, sample: int = 400, seed: int = 7) -> str:
+    """For labeled bird photos, how often does each detector find the bird the human
+    labeled (IoU >= 0.3 with v1's drawn box)? Also time per 4K frame."""
+    import random
+    import time
+
+    import cv2
+
+    from fountain_buddy.detect import Detector, iou
+
+    with closing(db.connect(store)) as conn:
+        rows = conn.execute(
+            "SELECT v.image_path, c.x1, c.y1, c.x2, c.y2 FROM visits v "
+            "JOIN current_labels l ON l.visit_id = v.id "
+            "JOIN crops c ON c.visit_id = v.id AND c.method = 'drawn-box' "
+            f"WHERE l.label IN ({','.join('?' * len(species.SPECIES))})",
+            species.SPECIES,
+        ).fetchall()
+    random.Random(seed).shuffle(rows)
+    rows = rows[:sample]
+    frames = [(cv2.imread(str(data_dir / r[0])), tuple(r[1:])) for r in rows]
+
+    lines = [
+        f"# Detector recall {dt.date.today().isoformat()}",
+        "",
+        f"{len(frames)} labeled bird photos (4K). Hit = a bird box with IoU >= 0.3 against the "
+        "box v1 drew (the drawn box is in the image for every detector alike).",
+        "",
+        "| detector | recall | top-1 is the labeled bird | ms/frame |",
+        "|---|---|---|---|",
+    ]
+    for weights, imgsz in DETECTOR_CONFIGS:
+        det = Detector(data_dir / "models", weights, imgsz)
+        det.birds(frames[0][0])  # warm-up
+        hits = top_hits = 0
+        start = time.perf_counter()
+        for frame, box in frames:
+            found = [iou(box, (d.x1, d.y1, d.x2, d.y2)) for d in det.birds(frame)]
+            hits += any(v >= 0.3 for v in found)
+            top_hits += bool(found) and found[0] >= 0.3
+        ms = 1000 * (time.perf_counter() - start) / len(frames)
+        n = len(frames)
+        lines.append(f"| {det.name} | {hits / n:.1%} | {top_hits / n:.1%} | {ms:.0f} |")
+    return "\n".join(lines) + "\n"
