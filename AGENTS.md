@@ -17,9 +17,8 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 
 ## Where we left off (2026-10-18)
 
-- Phase 0: the old GitHub repo is now `fountain-buddy-legacy` (private, archived). Bot
-  token reset and old webhooks deleted (both verified). Still open: camera password,
-  Gmail app password revocation.
+- Phase 0: done. The old GitHub repo is now `fountain-buddy-legacy` (private, archived),
+  and every leaked secret has been rotated or revoked. Channel renamed `#tray-feeder`.
 - Phase 1: done. Fresh public repo, `.env` on the new key names, `check` passes.
 - Next: Phase 2, rescuing the 3,636 human verifications from `data/legacy.db`.
 

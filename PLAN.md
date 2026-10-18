@@ -98,8 +98,9 @@ git ever tracks an image, database, `.env` or plist.
 - [x] Adam: reset the Discord bot token. Verified 2026-10-18: new token works, not in
       any leaked copy.
 - [x] Adam: delete the old webhooks. Verified: all 4 URLs in history return 404.
-- [ ] Adam: revoke the Gmail app password (Gmail is being dropped).
-- [ ] Adam: change the camera password in the Reolink app.
+- [x] Adam: revoke the Gmail app password (Gmail is being dropped).
+- [x] Adam: change the camera password. Verified: `check` logs in with a password that
+      is in no leaked copy. Phase 0 closed 2026-10-18.
 - [x] Claude: rename the old GitHub repo to `fountain-buddy-legacy`, private, archived.
 - [x] Claude: add an entry to `~/Documents/Projects/SECURITY-LOG.md`.
 - [x] Convert `.env` to the new keys (Claude, by script, 2026-10-18).
