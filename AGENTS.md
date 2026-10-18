@@ -23,6 +23,9 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 - Phase 2: done. v1's labels are in `data/fountain_buddy.db` (3,501 with crops).
 - Phase 3: done. BioCLIP 2 head + zero-shot (see "Model choices"). A fine-tuned
   YOLO26s detector is training: `data/detector/runs/`, log in `data/detector/train.log`.
+- **The tray feeder was installed 2026-10-18.** Birds take days to discover a new
+  feeder, so a quiet first few days is expected, not a fault. Camera motion detection is
+  at maximum sensitivity (sensDef 1, i.e. 50/50 in the app) over the whole frame.
 - Phase 4: built and live since 2026-10-18 15:09, but run from a Claude session, not
   launchd yet. Next: check Adam's first taps, swap in the fine-tuned detector if it wins,
   then Phase 6 (launchd), then Phase 5 (learning loop).
