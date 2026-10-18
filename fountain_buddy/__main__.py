@@ -52,6 +52,61 @@ def import_legacy() -> int:
     return 0
 
 
+def status() -> int:
+    """Terminal check for when the bot doesn't answer `status` in Discord."""
+    import datetime as dt
+    import os
+    import re
+    import socket
+    import subprocess
+
+    cfg = settings()
+    label = f"gui/{os.getuid()}/com.fountainbuddy.run"
+    out = subprocess.run(["launchctl", "print", label], capture_output=True, text=True)
+    ok = True
+    if out.returncode != 0:
+        print("launchd: NOT LOADED. Fix: launchd/install.sh")
+        ok = False
+    else:
+        fields = dict(
+            re.findall(r"^\t(state|pid|runs|last exit code|last terminating signal) = (.+)$",
+                       out.stdout, re.M)
+        )  # fmt: skip
+        last = fields.get("last exit code") or fields.get("last terminating signal")
+        tail = f", last exit: {last}" if last else ""
+        print(f"launchd: {fields.get('state')}, pid {fields.get('pid', '-')}, "
+              f"started {fields.get('runs')} times{tail}")  # fmt: skip
+        ok = fields.get("state") == "running"
+
+    log = cfg.data_dir / "logs" / "fountain-buddy.log"
+    lines = log.read_text(errors="ignore").splitlines() if log.exists() else []
+    started = [ln for ln in lines if "service: running" in ln]
+    print(f"last start: {started[-1][:19] if started else 'never'}")
+    print(f"last log line: {lines[-1][:19] if lines else 'none'}")
+    since = (dt.datetime.now() - dt.timedelta(days=1)).strftime("%Y-%m-%d %H:%M")
+    problems = [
+        ln for ln in lines
+        if ln[:16] >= since and (" WARNING " in ln or " ERROR " in ln)
+        and "voice will NOT be supported" not in ln
+    ]  # fmt: skip
+    for ln in problems[-5:]:
+        print("  " + ln[:160])
+
+    try:
+        socket.create_connection((cfg.camera_host, 443), timeout=3).close()
+        print(f"camera: answers at {cfg.camera_host}")
+    except OSError as exc:
+        print(f"camera: NOT reachable at {cfg.camera_host} ({exc}). Check its power and Wi-Fi.")
+        ok = False
+
+    if ok:
+        print("verdict: running. If Discord's `status` still gets no reply, restart it:")
+    else:
+        print("verdict: not healthy. Restart it:")
+    print("  launchd/install.sh   (then look for a permission dialog on the Mini's screen)")
+    return 0 if ok else 1
+
+
 def post_test(image: str) -> int:
     import cv2
 
@@ -122,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
         "import-legacy", help="import v1's visits and labels, and crop labeled photos (idempotent)"
     )
     sub.add_parser("run", help="run the service: camera, models, Discord")
+    sub.add_parser("status", help="is the service up? (launchd, log, camera)")
     sub.add_parser("train-head", help="retrain the species classifier on every label")
     p = sub.add_parser("post-test", help="post one image to Discord as a TEST sighting")
     p.add_argument("image", help="a frame (v1 overlays are painted out first)")
@@ -134,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         return check()
     if args.command == "import-legacy":
         return import_legacy()
+    if args.command == "status":
+        return status()
     if args.command == "run":
         from fountain_buddy import service
 

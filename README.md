@@ -30,6 +30,22 @@ Photos, the database and trained models live in `data/`, which git never tracks.
 
 To run it as a service on the Mac: `launchd/install.sh` (see AGENTS.md, "Deploying").
 
+## Is it running?
+
+1. **In Discord, type `status` in #tray-feeder.** A reply means the service is up. It
+   shows how long it has been running, when the camera last answered (⚠️ if more than
+   15 minutes ago), today's counts, and the last bird. No birds but a ✅ camera just
+   means a quiet tray.
+2. **No reply?** On the Mini:
+   `cd /Volumes/Envoy/apps/fountain-buddy && uv run fountain-buddy status`
+   It shows launchd's view, the last start, recent warnings, and whether the camera
+   answers on the network.
+3. **Fix:** `launchd/install.sh` restarts it. Then look at the Mini's screen: a macOS
+   permission dialog ("python3.13 would like to access…") pauses the service until you
+   click Allow.
+4. The bot also posts on its own when the camera has been unreachable for 15 minutes,
+   and again when it comes back.
+
 ## Hardware
 
 - Reolink RLC-810WA (4K, Wi-Fi) aimed at a safflower tray feeder.

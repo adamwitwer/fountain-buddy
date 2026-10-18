@@ -28,8 +28,9 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
   at maximum sensitivity (sensDef 1, i.e. 50/50 in the app) over the whole frame.
 - Phase 4: done. Adam's first tap (on a TEST post) and a hand-wave motion test both
   worked end to end on 2026-10-18.
-- Phase 6: live under launchd since 2026-10-18 16:19 (see "Deploying"). Still open:
-  healthchecks.io URL.
+- Phase 6: done. Live under launchd since 2026-10-18 16:19 (see "Deploying").
+  healthchecks.io was declined; liveness is the Discord `status` reply plus the
+  camera-down alert (README, "Is it running?").
 - Next: swap in the fine-tuned detector if it wins, then Phase 5 (learning loop).
 
 ## Commands
@@ -38,6 +39,7 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 uv sync                          # .venv, Python 3.13
 uv run fountain-buddy check      # settings + camera login
 uv run fountain-buddy run        # the service (camera, models, Discord), one process
+uv run fountain-buddy status     # is it up? launchd state, last start, warnings, camera
 uv run fountain-buddy train-head # retrain the classifier on every label; hot-reloaded
 uv run fountain-buddy post-test IMAGE   # post a TEST sighting (source='test', never trained)
 uv run fountain-buddy import-legacy     # v1 import (idempotent; already done)
@@ -71,6 +73,13 @@ launchd/install.sh uninstall
   A `brew upgrade` that moves python to a new Cellar path will prompt again and pause
   the service until someone clicks Allow on the Mini. After any Python upgrade, re-run
   `uv sync`, `launchd/install.sh`, and check for the `service: running` line.
+- **Homebrew `python@3.13` is pinned** (`brew pin`, 2026-10-18) so an upgrade can't
+  silently move the binary the permissions are tied to. To upgrade on purpose:
+  `brew unpin python@3.13 && brew upgrade python@3.13`, then `uv sync`,
+  `launchd/install.sh`, and click Allow on the Mini twice.
+- `install.sh` waits for `bootout` to finish before `bootstrap`. Without the wait, a
+  quick reinstall fails with "Bootstrap failed: 5: Input/output error" and leaves the
+  service **unloaded** (it happened once, 2026-10-18 16:27).
 - It is a LaunchAgent (runs in Adam's login session). With FileVault on, nothing could
   start before login anyway, so after a power cut it starts once Adam logs in.
 - Only one copy may run. Two would double-post and fight over button taps, so stop any
@@ -198,6 +207,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-18 | Liveness: suggested healthchecks.io (it catches a dead Mini, which nothing on the Mini can report). Adam: overkill. Instead the bot answers `status` in Discord, and `fountain-buddy status` covers the terminal. Known gap: if the whole Mini or the service is down, nothing posts, so a silent channel for days during busy bird season is the hint to type `status`. | declined (healthchecks); done (status) |
 | 2026-10-18 | Start a fresh public repo instead of rewriting v1's history. A force-push leaves the old commits reachable by SHA on GitHub, and rotating the secrets is the real fix anyway. v1 was renamed `fountain-buddy-legacy`, made private and archived. This repo took the name. | done |
 | 2026-10-18 | Replace the TF CNN with frozen foundation-model features plus a small classifier trained on Adam's labels. The CNN was trained mostly on NABirds' professional photos and failed on the feeder camera. A small head retrains in seconds, so the model can learn after every few answers. BioCLIP 2 vs DINOv3 is decided by a bake-off on our data (Phase 3). | adopted |
 | 2026-10-18 | Discord bot posts directly with buttons and a dropdown, tied to the message ID. This drops webhooks (two fewer secrets) and the filename-in-text matching. | adopted |

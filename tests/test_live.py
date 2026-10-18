@@ -165,3 +165,20 @@ def test_camera_connect_times_out_instead_of_hanging(monkeypatch):
             await cam.connect()
 
     asyncio.run(go())
+
+
+def test_status_text(tmp_path):
+    import time
+
+    from fountain_buddy.config import Settings
+    from fountain_buddy.service import status_text
+
+    cfg = Settings(camera_host="192.0.2.1", camera_username="u", data_dir=tmp_path)
+    db.init(cfg.db_path)
+    now = time.time()
+    text = status_text(cfg, now - 7200, now - 30, "yolo26m@1280", "head-x.joblib", now=now)
+    assert "Running for 2.0 h" in text and "last OK 30 s ago ✅" in text
+    assert "Last bird: none yet" in text and "0 birds posted" in text
+    stale = status_text(cfg, now - 7200, now - 3600, "d", "h", now=now)
+    assert "last OK 60 min ago ⚠️" in stale
+    assert "never reached since start ⚠️" in status_text(cfg, now, 0.0, "d", "h", now=now)

@@ -197,6 +197,8 @@ class FeederBot(discord.Client):
         super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions.none())
         self.store, self.channel_id = store, channel_id
         self.ready = asyncio.Event()
+        # Set by the service: returns the text for a `status` message.
+        self.status_provider = None
 
     async def setup_hook(self) -> None:
         self.add_dynamic_items(LabelButton, OtherSelect, ChangeButton)
@@ -236,12 +238,11 @@ class FeederBot(discord.Client):
         await interaction.response.edit_message(embed=embed, view=view)
 
     async def on_message(self, message: discord.Message) -> None:
-        if (
-            message.author.bot
-            or message.webhook_id
-            or message.channel.id != self.channel_id
-            or message.reference is None
-        ):
+        if message.author.bot or message.webhook_id or message.channel.id != self.channel_id:
+            return
+        if message.reference is None:
+            if message.content.strip().lower() in ("status", "!status") and self.status_provider:
+                await message.reply(self.status_provider())
             return
         with closing(db.connect(self.store)) as conn:
             row = conn.execute(

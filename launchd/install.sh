@@ -10,6 +10,11 @@ TARGET="$HOME/Library/LaunchAgents/$LABEL.plist"
 DOMAIN="gui/$(id -u)"
 
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
+# bootout returns before the old job is gone; bootstrapping too soon fails with error 5.
+for _ in $(seq 1 30); do
+    launchctl print "$DOMAIN/$LABEL" >/dev/null 2>&1 || break
+    sleep 0.5
+done
 
 if [[ "${1:-}" == "uninstall" ]]; then
     rm -f "$TARGET"

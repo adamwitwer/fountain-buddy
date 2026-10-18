@@ -98,6 +98,49 @@ def load_pipeline(cfg: Settings, **kwargs) -> Pipeline:
     return Pipeline(cfg.db_path, cfg.data_dir, detector, classifier, **kwargs)
 
 
+def _ago(seconds: float) -> str:
+    if seconds < 90:
+        return f"{seconds:.0f} s"
+    if seconds < 5400:
+        return f"{seconds / 60:.0f} min"
+    if seconds < 172800:
+        return f"{seconds / 3600:.1f} h"
+    return f"{seconds / 86400:.0f} days"
+
+
+def status_text(cfg: Settings, started: float, camera_ok: float, detector: str,
+                head: str, now: float | None = None) -> str:  # fmt: skip
+    """The reply to `status` in Discord: enough to tell up, blind, or quiet apart."""
+    now = now or time.time()
+    camera_age = now - camera_ok if camera_ok else None
+    if camera_age is None:
+        camera_line = "never reached since start ⚠️"
+    else:
+        mark = " ⚠️" if camera_age > CAMERA_DOWN_ALERT_SECONDS else " ✅"
+        camera_line = f"last OK {_ago(camera_age)} ago{mark}"
+    today = dt.date.today().isoformat()
+    with closing(db.connect(cfg.db_path)) as conn:
+        last = conn.execute(
+            "SELECT taken_at FROM visits WHERE source = 'live' ORDER BY taken_at DESC LIMIT 1"
+        ).fetchone()
+        posts = conn.execute(
+            "SELECT COUNT(*) FROM posts p JOIN visits v ON v.id = p.visit_id "
+            "WHERE v.source = 'live' AND v.taken_at >= ?",
+            (today,),
+        ).fetchone()[0]
+    rejects = len(list((cfg.data_dir / "rejects" / today).glob("*.jpg")))
+    sighting = "none yet"
+    if last:
+        sighting = f"{_ago(now - dt.datetime.fromisoformat(last[0]).timestamp())} ago"
+    return "\n".join([
+        f"🟢 Running for {_ago(now - started)}.",
+        f"Camera: {camera_line}",
+        f"Today: {posts} birds posted, {rejects} motion bursts with no bird",
+        f"Last bird: {sighting}",
+        f"Models: {detector}, {head}",
+    ])  # fmt: skip
+
+
 class Service:
     """Construct inside the event loop: the camera client needs a running loop."""
 
@@ -109,6 +152,15 @@ class Service:
         self.pipeline: Pipeline | None = None
         self.last_post = 0.0
         self.camera_alerted = False
+        self.started = time.time()
+        self.bot.status_provider = self.status
+
+    def status(self) -> str:
+        return status_text(
+            self.cfg, self.started, self.camera.last_ok,
+            self.pipeline.detector.name if self.pipeline else "loading",
+            self.pipeline.classifier.version if self.pipeline else "loading",
+        )  # fmt: skip
 
     async def on_motion(self) -> None:
         if time.time() - self.last_post < POST_COOLDOWN_SECONDS:

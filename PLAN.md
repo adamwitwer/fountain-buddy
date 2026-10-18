@@ -168,8 +168,8 @@ git ever tracks an image, database, `.env` or plist.
 - [x] Camera-down alert in Discord after 15 min. Camera connect times out (60 s) instead
       of hanging.
 - [x] Deploy notes in AGENTS.md.
-- [ ] healthchecks.io: Adam creates a check and sets `HEALTHCHECK_URL` in `.env`
-      (pings every 5 min; `/fail` when the camera or Discord is down).
+- [x] ~~healthchecks.io~~ declined by Adam (overkill). Instead: `status` in Discord, the
+      `fountain-buddy status` CLI, and README "Is it running?".
 
 ## Open questions
 
