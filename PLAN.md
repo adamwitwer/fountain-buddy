@@ -95,14 +95,14 @@ git ever tracks an image, database, `.env` or plist.
 
 ### Phase 0: Lock down
 
-- [ ] Adam: reset the Discord bot token (Developer Portal → Bot → Reset Token).
-- [ ] Adam: delete both old webhooks (the bot posts directly from now on).
+- [x] Adam: reset the Discord bot token. Verified 2026-10-18: new token works, not in
+      any leaked copy.
+- [x] Adam: delete the old webhooks. Verified: all 4 URLs in history return 404.
 - [ ] Adam: revoke the Gmail app password (Gmail is being dropped).
 - [ ] Adam: change the camera password in the Reolink app.
 - [x] Claude: rename the old GitHub repo to `fountain-buddy-legacy`, private, archived.
 - [x] Claude: add an entry to `~/Documents/Projects/SECURITY-LOG.md`.
-- [ ] Adam: convert `.env` to the new keys (see `.env.example`), then Claude makes the
-      first commit and pushes.
+- [x] Convert `.env` to the new keys (Claude, by script, 2026-10-18).
 
 ### Phase 1: New repo
 
@@ -113,7 +113,7 @@ git ever tracks an image, database, `.env` or plist.
       `reminders/AGENTS.md`), plus a `CLAUDE.md` that contains only `@AGENTS.md`.
 - [x] Strict `.gitignore`, plus `scripts/hygiene.py` as a test and a pre-commit hook.
 - [x] Move `bird_images/` and `fountain_buddy.db` into `data/images/` and `data/legacy.db`.
-- [ ] First commit; create the public `adamwitwer/fountain-buddy` and push.
+- [x] First commit; create the public `adamwitwer/fountain-buddy` and push (`8f876d7`).
 
 ### Phase 2: Rescue the data
 
