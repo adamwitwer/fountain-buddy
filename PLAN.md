@@ -145,7 +145,12 @@ git ever tracks an image, database, `.env` or plist.
 
 ### Phase 4: Live pipeline
 
-- [ ] Camera events → burst → detect → classify → Discord post with buttons.
+- [x] Camera events → burst → detect → classify → Discord post with buttons (`9c2776f`).
+      A test post rendered correctly; the service went live 2026-10-18 15:09, run from
+      a Claude session until Phase 6 (launchd). Interim detector: yolo26m@1280, conf 0.1.
+- [ ] Swap in the fine-tuned detector (`data/models/detector.json`) if it beats 71%
+      recall on the held-out test frames. Training started 2026-10-18 15:00, about 6.5
+      min per epoch, 60 epochs max with early stopping.
 - [ ] Run alongside Adam for a few days before it counts.
 
 ### Phase 5: Learning loop

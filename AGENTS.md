@@ -20,13 +20,23 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 - Phase 0: done. The old GitHub repo is now `fountain-buddy-legacy` (private, archived),
   and every leaked secret has been rotated or revoked. Channel renamed `#tray-feeder`.
 - Phase 1: done. Fresh public repo, `.env` on the new key names, `check` passes.
-- Next: Phase 2, rescuing the 3,636 human verifications from `data/legacy.db`.
+- Phase 2: done. v1's labels are in `data/fountain_buddy.db` (3,501 with crops).
+- Phase 3: done. BioCLIP 2 head + zero-shot (see "Model choices"). A fine-tuned
+  YOLO26s detector is training: `data/detector/runs/`, log in `data/detector/train.log`.
+- Phase 4: built and live since 2026-10-18 15:09, but run from a Claude session, not
+  launchd yet. Next: check Adam's first taps, swap in the fine-tuned detector if it wins,
+  then Phase 6 (launchd), then Phase 5 (learning loop).
 
 ## Commands
 
 ```bash
 uv sync                          # .venv, Python 3.13
 uv run fountain-buddy check      # settings + camera login
+uv run fountain-buddy run        # the service (camera, models, Discord), one process
+uv run fountain-buddy train-head # retrain the classifier on every label; hot-reloaded
+uv run fountain-buddy post-test IMAGE   # post a TEST sighting (source='test', never trained)
+uv run fountain-buddy import-legacy     # v1 import (idempotent; already done)
+uv run fountain-buddy bakeoff [--detectors]   # Phase 3 comparisons -> data/reports/
 uv run pytest                    # run before every commit
 uv run ruff check . && uv run ruff format --check .
 git config core.hooksPath .githooks   # once per clone: the secrets/data guard
@@ -55,6 +65,18 @@ git config core.hooksPath .githooks   # once per clone: the secrets/data guard
   photo": it trains the not-usable class but is never a sighting. The Discord dropdown
   holds at most 25 options.
 - **Settings are read lazily** through `config.settings()`, never captured at import.
+- **Build `Service` inside the event loop.** reolink_aio's `Host` creates an aiohttp
+  connector in its constructor, which needs a running loop. Constructing it outside one
+  crashed both `post-test` and `run` on the first try.
+- **Model pointers, not hard-coded paths.** `data/models/head.json` names the current
+  classifier head (hot-reloaded). `data/models/detector.json` names the detector weights,
+  imgsz and conf (read at startup; default yolo26m@1280, conf 0.1). Ultralytics weights
+  live in `data/models/`, never the repo root.
+- **Write plain Python ints to SQLite.** numpy integers are stored as 8-byte BLOBs and
+  silently break comparisons (it happened to the crop coordinates on 2026-10-18).
+- **Never trust a single motion source.** Push events can drop, so `camera.watch` also
+  polls motion state every 3 s. Only the initial state push has been seen so far; check
+  the first real motion in the log.
 - **Python 3.13, uv-managed.** No TensorFlow. PyTorch on MPS.
 - **Measure models on our own photos, split by time** (older to train, newer to test). A
   retrained model replaces the current one only if it scores at least as well.
