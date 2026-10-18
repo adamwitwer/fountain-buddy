@@ -52,6 +52,50 @@ def import_legacy() -> int:
     return 0
 
 
+def post_test(image: str) -> int:
+    import cv2
+
+    from fountain_buddy import legacy
+    from fountain_buddy.bot import FeederBot
+    from fountain_buddy.service import load_pipeline
+
+    cfg = settings()
+    pipeline = load_pipeline(cfg, camera="test", source="test")
+    frame = legacy.remove_overlays(cv2.imread(image))
+    sighting = pipeline.process([frame])
+    if sighting is None:
+        print("no bird found in that image")
+        return 1
+    print("top guesses:", [(label, round(p, 3)) for label, p in sighting.ranked[:3]])
+
+    async def go():
+        bot = FeederBot(cfg.db_path, cfg.discord_channel_id)
+        task = asyncio.create_task(bot.start(cfg.discord_token))
+        await asyncio.wait_for(bot.ready.wait(), 60)
+        message = await bot.post(sighting.visit_id, sighting.preview_path)
+        print(f"posted visit {sighting.visit_id}: {message.jump_url}")
+        await bot.close()
+        task.cancel()
+
+    asyncio.run(go())
+    return 0
+
+
+def train_head() -> int:
+    import json
+    import logging
+
+    from fountain_buddy import classifier
+
+    logging.basicConfig(level=logging.INFO)
+    cfg = settings()
+    path = classifier.train_head(cfg.db_path, cfg.data_dir)
+    meta = json.loads((cfg.models_dir / "head.json").read_text())
+    print(f"head: {path.name} on {meta['labels']} labels + {meta['nabirds']} NABirds")
+    print("held-out:", {k: round(v, 3) for k, v in meta["heldout"].items()})
+    return 0
+
+
 def bakeoff(models: list[str], detectors: bool = False) -> int:
     import datetime as dt
 
@@ -77,6 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser(
         "import-legacy", help="import v1's visits and labels, and crop labeled photos (idempotent)"
     )
+    sub.add_parser("run", help="run the service: camera, models, Discord")
+    sub.add_parser("train-head", help="retrain the species classifier on every label")
+    p = sub.add_parser("post-test", help="post one image to Discord as a TEST sighting")
+    p.add_argument("image", help="a frame (v1 overlays are painted out first)")
     p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
     p.add_argument("--models", nargs="+", default=["bioclip2", "dinov3-l", "dinov3-b"])
     p.add_argument("--detectors", action="store_true", help="compare detectors instead")
@@ -86,6 +134,14 @@ def main(argv: list[str] | None = None) -> int:
         return check()
     if args.command == "import-legacy":
         return import_legacy()
+    if args.command == "run":
+        from fountain_buddy import service
+
+        return service.main()
+    if args.command == "train-head":
+        return train_head()
+    if args.command == "post-test":
+        return post_test(args.image)
     if args.command == "bakeoff":
         return bakeoff(args.models, args.detectors)
     return 2

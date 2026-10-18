@@ -22,6 +22,9 @@ _PEANUT_FROM = "2025-12-01"
 
 # Inset from the drawn box so the 2 px line and its JPEG bleed stay out of the crop.
 INSET = 4
+# v1's real boxes are all >= 100 px on their short side in 4K frames; anything under
+# 40 px is a square of green foliage (12 such false finds on 2026-10-18).
+MIN_SIDE = 40
 
 
 def _camera(location: str | None, taken_at: str) -> str:
@@ -84,24 +87,45 @@ def import_visits(legacy_db: Path, store: Path) -> dict[str, int]:
     return counts
 
 
+def _green_masks(img: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(pure-green pixels, the straight horizontal/vertical runs among them).
+    Keeping only straight runs stops a box that touches green foliage from merging with
+    it into one blob."""
+    b, g, r = cv2.split(img)
+    green = ((g > 160) & (r < 110) & (b < 110)).astype(np.uint8)
+    green = cv2.morphologyEx(green, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    lines = cv2.morphologyEx(green, cv2.MORPH_OPEN, np.ones((1, 15), np.uint8)) | (
+        cv2.morphologyEx(green, cv2.MORPH_OPEN, np.ones((15, 1), np.uint8))
+    )
+    return green, lines
+
+
+def remove_overlays(img: np.ndarray) -> np.ndarray:
+    """Paint out v1's drawn boxes and the label text above them, so a detector trained
+    on these frames can't learn "green rectangle means bird"."""
+    green, lines = _green_masks(img)
+    mask = cv2.dilate(lines, np.ones((5, 5), np.uint8))
+    n, _, stats, _ = cv2.connectedComponentsWithStats(lines, connectivity=8)
+    h, w = green.shape
+    for i in range(1, n):
+        x, y = stats[i][0], stats[i][1]
+        # v1 wrote "<label> <conf>" at (x1, y1 - 10) in small green type.
+        y0, x1 = max(0, y - 40), min(w, x + 320)
+        mask[y0 : y + 3, max(0, x - 3) : x1] |= green[y0 : y + 3, max(0, x - 3) : x1]
+    mask = cv2.dilate(mask, np.ones((3, 3), np.uint8))
+    return cv2.inpaint(img, mask, 3, cv2.INPAINT_TELEA)
+
+
 def find_drawn_box(img: np.ndarray) -> tuple[int, int, int, int] | None:
     """Find v1's green box in a BGR frame. Returns (x1, y1, x2, y2) of the line centers,
     or None. Picks the largest hollow green rectangle; the label text above it and
     green foliage don't form one."""
-    b, g, r = cv2.split(img)
-    mask = ((g > 160) & (r < 110) & (b < 110)).astype(np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
-    # Keep only straight horizontal/vertical runs, so a box touching green foliage
-    # doesn't merge with it into one blob.
-    lines = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((1, 15), np.uint8)) | (
-        cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((15, 1), np.uint8))
-    )
-    mask = cv2.dilate(lines, np.ones((3, 3), np.uint8))
+    mask = cv2.dilate(_green_masks(img)[1], np.ones((3, 3), np.uint8))
     n, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
     best, best_area = None, 0
     for i in range(1, n):
         x, y, w, h, area = stats[i]
-        if w < 16 or h < 16 or area > 0.5 * w * h:
+        if w < MIN_SIDE or h < MIN_SIDE or area > 0.5 * w * h:
             continue
         sub = mask[y : y + h, x : x + w]
         rows = np.flatnonzero(sub.mean(axis=1) > 0.6)
@@ -109,7 +133,7 @@ def find_drawn_box(img: np.ndarray) -> tuple[int, int, int, int] | None:
         if len(rows) < 2 or len(cols) < 2:
             continue
         top, bottom, left, right = rows[0], rows[-1], cols[0], cols[-1]
-        if bottom - top < 12 or right - left < 12:
+        if bottom - top < MIN_SIDE or right - left < MIN_SIDE:
             continue
         # The vertical sides must run the full height between the horizontal lines.
         span = sub[top : bottom + 1]

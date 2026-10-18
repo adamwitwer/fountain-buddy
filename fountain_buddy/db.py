@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS predictions (
 );
 CREATE INDEX IF NOT EXISTS predictions_visit ON predictions(visit_id);
 
+CREATE TABLE IF NOT EXISTS posts (
+    message_id INTEGER PRIMARY KEY,          -- Discord message
+    visit_id   INTEGER NOT NULL UNIQUE REFERENCES visits(id),
+    channel_id INTEGER NOT NULL,
+    posted_at  TEXT NOT NULL
+);
+
 -- The current label for a visit is its most recent one.
 CREATE VIEW IF NOT EXISTS current_labels AS
     SELECT l.* FROM labels l

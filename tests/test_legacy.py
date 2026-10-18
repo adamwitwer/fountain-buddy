@@ -92,3 +92,21 @@ def test_iou():
     assert iou((0, 0, 10, 10), (0, 0, 10, 10)) == 1.0
     assert iou((0, 0, 10, 10), (20, 20, 30, 30)) == 0.0
     assert abs(iou((0, 0, 10, 10), (5, 0, 15, 10)) - 1 / 3) < 1e-9
+
+
+def test_remove_overlays_erases_the_box():
+    img = _frame_with_box((400, 200, 640, 380), foliage=True)
+    clean = legacy.remove_overlays(img)
+    assert legacy.find_drawn_box(img) is not None
+    assert legacy.find_drawn_box(clean) is None
+    b, g, r = (clean[:, :, i].astype(int) for i in range(3))
+    assert ((g > 160) & (r < 110) & (b < 110))[195:205, 400:640].mean() < 0.05
+
+
+def test_find_drawn_box_ignores_tiny_squares():
+    img = _frame_with_box((400, 200, 640, 380))
+    cv2.rectangle(img, (900, 500), (920, 520), (0, 255, 0), 2)  # a foliage-sized square
+    found = legacy.find_drawn_box(img)
+    assert found is not None and found[0] < 450
+    small_only = _frame_with_box((400, 200, 430, 230))
+    assert legacy.find_drawn_box(small_only) is None
