@@ -135,11 +135,13 @@ git ever tracks an image, database, `.env` or plist.
 
 ### Phase 3: Model bake-off (on our data, not published benchmarks)
 
-- [ ] Detection: YOLO26 vs yolov8n, measured by how many labeled birds each finds.
-- [ ] Classification: BioCLIP 2 vs DINOv3 (each with a small trained classifier), with
-      and without the NABirds supplement. Report per-species accuracy and how well the
-      confidence scores match reality.
-- [ ] Pick, and record the numbers in AGENTS.md.
+- [x] Detection: YOLO26 vs yolov8n, measured by how many labeled birds each finds. Best
+      off-the-shelf is yolo26m@1280 at 54–71% recall, which is too low.
+- [ ] Fine-tune YOLO26 on our ~3,500 verified boxes (drawn lines inpainted out first).
+      Accept only if recall clearly beats 71% on a time-split test set.
+- [x] Classification: BioCLIP 2 head (local + NABirds) blended with zero-shot. 81.5%
+      top-1, 98.3% top-3, 91.5% on birds; v1 was 7.3%.
+- [x] Pick, and record the numbers in AGENTS.md ("Model choices").
 
 ### Phase 4: Live pipeline
 

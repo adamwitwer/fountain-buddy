@@ -61,6 +61,48 @@ git config core.hooksPath .githooks   # once per clone: the secrets/data guard
 - Run `pytest` before every commit. After a search-and-replace edit, grep to confirm it
   landed.
 
+## Model choices (Phase 3, 2026-10-18)
+
+Measured on our own labeled crops, time split (train through 2025-08-12, test the newest
+701 crops, 2025-08-12 to 2025-10-07). Full tables are in `data/reports/`; rerun with
+`fountain-buddy bakeoff` and `fountain-buddy bakeoff --detectors`.
+
+**Classifier: BioCLIP 2, frozen, plus a logistic-regression head** trained on our
+labels plus NABirds crops (weight 0.5, C=30), blended with BioCLIP 2 zero-shot
+(geometric mix, alpha 0.3) over the species part of the distribution.
+
+| variant | top1 | top3 | birds top1 | macro recall | ECE | skip recall |
+|---|---|---|---|---|---|---|
+| v1 EfficientNet (baseline) | 7.3% | | | | | |
+| BioCLIP 2 head, local + NABirds | 81.7% | 98.4% | 91.5% | 85.7% | 0.036 | 53.6% |
+| BioCLIP 2 head + zero-shot 0.3 (**chosen**) | 81.5% | 98.3% | 91.5% | 87.6% | 0.027 | 52.5% |
+| BioCLIP 2 zero-shot only, birds | 92.7% | 96.5% | 92.7% | 91.9% | 0.033 | n/a |
+| DINOv3-L head, local + NABirds | 83.7% | 98.1% | 91.3% | 83.1% | 0.018 | 61.9% |
+| BioCLIP 2 + DINOv3-L concat head | 82.9% | 98.9% | 90.8% | 82.5% | 0.027 | 60.2% |
+
+- BioCLIP 2 identifies species best, and its zero-shot is strong enough (92.7% on our
+  birds with no training) to cover species with no local labels (goldfinch, junco).
+- **Skip is the weak spot** for every model (52–62% recall). Some of that is label
+  noise: Skip was a judgment call. Every photo goes to Discord anyway, so a missed Skip
+  costs one tap.
+- DINOv3 helps Skip a little, but a second ViT-L on every frame wasn't worth +1 point.
+- House Sparrow recall (80%) loses mostly to Skip. Song Sparrow (5 test crops) was 0%.
+
+**Detector: off-the-shelf COCO YOLO is the bottleneck.** Recall of the bird the human
+labeled (IoU >= 0.3 with v1's drawn box) on 400 labeled 4K photos:
+
+| detector | conf>=0.25 | conf>=0.1 | conf>=0.05 | ms/frame (M4 Pro, MPS) |
+|---|---|---|---|---|
+| yolov8n@640 (v1) | 42.2% | | | 7 |
+| yolo26s@1280 | 45.2% | 57.8% | 63.8% | 21 |
+| yolo26m@1280 | 54.2% | 64.5% | 70.8% | 43 |
+| yolo26l@1280 | 43.5% | 51.8% | 58.5% | |
+
+COCO birds score 0.15–0.3 on these frames, and some are called "cat". v1 got by
+because its burst kept the best of 5 frames at a low threshold. The plan: fine-tune
+YOLO26 on our ~3,500 verified boxes, with v1's drawn lines inpainted out first so the
+detector can't learn "green rectangle means bird". Interim: yolo26m@1280, conf 0.1.
+
 ## The camera (Tray Feeder)
 
 Reolink RLC-810WA at 192.168.50.249, 4K (3840×2160) on Wi-Fi, firmware v3.0.0.4348.
