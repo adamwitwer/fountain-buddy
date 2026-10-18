@@ -1,0 +1,47 @@
+# This repo is public. Secrets and data must never be tracked:
+# tests/test_hygiene.py and .githooks/pre-commit enforce it.
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.plist
+!launchd/*.plist.example
+
+# Data: images, databases, models, datasets
+data/
+*.db
+*.db-*
+*.sqlite*
+*.jpg
+*.jpeg
+*.JPG
+*.png
+*.pt
+*.pth
+*.safetensors
+*.keras
+*.onnx
+*.mlpackage/
+*.npz
+*.npy
+*.joblib
+*.pkl
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Logs
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+.claude/settings.local.json

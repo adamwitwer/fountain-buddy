@@ -1,0 +1,3 @@
+#!/bin/sh
+# Block commits that would put secrets or data into this public repo.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/hygiene.py"

@@ -1,0 +1,43 @@
+[project]
+name = "fountain-buddy"
+version = "2.0.0"
+description = "Feeder camera → bird detection → species ID → Discord verification → a model that learns from the answers"
+readme = "README.md"
+requires-python = ">=3.13,<3.15"
+dependencies = [
+    "discord.py>=2.6",
+    "numpy>=2.1",
+    "open-clip-torch>=3.0",
+    "opencv-python-headless>=4.11",
+    "pillow>=11",
+    "python-dotenv>=1.1",
+    "reolink-aio>=0.21",
+    "scikit-learn>=1.7",
+    "torch>=2.8",
+    "torchvision>=0.23",
+    "ultralytics>=8.4",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.4", "ruff>=0.13"]
+
+[project.scripts]
+fountain-buddy = "fountain_buddy.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["fountain_buddy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
