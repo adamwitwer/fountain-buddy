@@ -118,14 +118,20 @@ git ever tracks an image, database, `.env` or plist.
 
 ### Phase 2: Rescue the data
 
-- [ ] New schema: visits, detections, predictions, labels (human labels kept apart from
-      model output).
-- [ ] Import the 3,636 verifications. Normalize names (`Blue_Jay`, `Skiip`, `Squirrel`).
-      Fix the Dec 2025 location tags.
-- [ ] Re-run detection on the stored images and cut clean crops from inside the drawn box.
-- [ ] Split by time (older to train, newer to test) so scores reflect new birds.
-- [ ] Keep the NABirds subset for tray species and our labeled species. Archive the rest,
-      along with `training_data_enhanced_cnn/`, the old models and the old venv.
+- [x] New schema (`fountain_buddy/db.py`): visits, crops, labels, predictions, and a
+      `current_labels` view. Human labels are kept apart from model output.
+- [x] `fountain-buddy import-legacy` (idempotent): 7,884 visits, 3,653 human labels
+      (including 17 skip replies that v1 stored as `archived_poor_quality`), and 4,104
+      v1 predictions as a baseline. Names normalized. Dec 2025 rows re-tagged
+      `legacy-peanut`.
+- [x] Crops cut from just inside v1's drawn green box (it marks the bird the human
+      labeled): 3,501 of 3,653 (96%). 150 have no recoverable box (box hidden or broken
+      up by foliage), and 2 images are missing. YOLO re-detection can recover those later.
+- [x] Time split (oldest 80% train, newest 20% test) lives in `bakeoff.time_split`.
+- [x] NABirds subset: 3,825 bounding-box crops for all 22 species in `data/nabirds/`
+      (322 MB), including American Goldfinch (240) and Dark-eyed Junco (362), which have
+      no local labels. The full dataset, `training_data_enhanced_cnn/`, the old models
+      and the old venv stay archived in the legacy folder.
 
 ### Phase 3: Model bake-off (on our data, not published benchmarks)
 

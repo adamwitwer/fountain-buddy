@@ -6,6 +6,10 @@ def test_labels_fit_a_discord_dropdown():
     assert len(set(species.LABELS)) == len(species.LABELS)
 
 
+def test_every_species_has_a_scientific_name():
+    assert set(species.SCIENTIFIC) == set(species.SPECIES)
+
+
 def test_canonical_handles_legacy_spellings():
     assert species.canonical("Blue_Jay") == "Blue Jay"
     assert species.canonical("  northern   cardinal ") == "Northern Cardinal"

@@ -41,14 +41,49 @@ def check() -> int:
     return 0 if camera_ok else 1
 
 
+def import_legacy() -> int:
+    from fountain_buddy import legacy
+
+    cfg = settings()
+    counts = legacy.import_visits(cfg.data_dir / "legacy.db", cfg.db_path)
+    print("import:", counts)
+    counts = legacy.extract_crops(cfg.db_path, cfg.data_dir)
+    print("crops:", counts)
+    return 0
+
+
+def bakeoff(models: list[str]) -> int:
+    import datetime as dt
+
+    from fountain_buddy import bakeoff as bake
+
+    cfg = settings()
+    text = bake.run(cfg.db_path, cfg.data_dir, models)
+    out = cfg.data_dir / "reports" / f"bakeoff-{dt.date.today().isoformat()}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text)
+    print(text)
+    print(f"report: {out}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="fountain-buddy")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="sanity-check settings and log in to the camera")
+    sub.add_parser(
+        "import-legacy", help="import v1's visits and labels, and crop labeled photos (idempotent)"
+    )
+    p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
+    p.add_argument("--models", nargs="+", default=["bioclip2", "dinov3-l", "dinov3-b"])
     args = parser.parse_args(argv)
 
     if args.command == "check":
         return check()
+    if args.command == "import-legacy":
+        return import_legacy()
+    if args.command == "bakeoff":
+        return bakeoff(args.models)
     return 2
 
 

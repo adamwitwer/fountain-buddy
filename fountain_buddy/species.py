@@ -36,6 +36,32 @@ OCCASIONAL_SPECIES = [
 
 SPECIES = TRAY_SPECIES + OCCASIONAL_SPECIES
 
+# For zero-shot text prompts: BioCLIP 2 was trained on taxonomic names.
+SCIENTIFIC = {
+    "Northern Cardinal": "Cardinalis cardinalis",
+    "Tufted Titmouse": "Baeolophus bicolor",
+    "House Finch": "Haemorhous mexicanus",
+    "American Goldfinch": "Spinus tristis",
+    "Mourning Dove": "Zenaida macroura",
+    "Black-capped Chickadee": "Poecile atricapillus",
+    "Dark-eyed Junco": "Junco hyemalis",
+    "White-breasted Nuthatch": "Sitta carolinensis",
+    "Red-breasted Nuthatch": "Sitta canadensis",
+    "White-throated Sparrow": "Zonotrichia albicollis",
+    "House Sparrow": "Passer domesticus",
+    "European Starling": "Sturnus vulgaris",
+    "Common Grackle": "Quiscalus quiscula",
+    "Blue Jay": "Cyanocitta cristata",
+    "Downy Woodpecker": "Dryobates pubescens",
+    "Hairy Woodpecker": "Dryobates villosus",
+    "Red-bellied Woodpecker": "Melanerpes carolinus",
+    "Carolina Wren": "Thryothorus ludovicianus",
+    "Song Sparrow": "Melospiza melodia",
+    "American Robin": "Turdus migratorius",
+    "Gray Catbird": "Dumetella carolinensis",
+    "Red-winged Blackbird": "Agelaius phoeniceus",
+}
+
 # Labels that are not a bird species. SKIP means "unusable photo": it trains the
 # classifier's not-usable class but never counts as a sighting.
 SQUIRREL = "Squirrel"
