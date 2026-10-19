@@ -34,7 +34,10 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
   camera-down alert (README, "Is it running?").
 - First real birds: two Carolina Wrens at 18:28 and 18:29 on 2026-10-18, found by the
   detector and guessed right by the classifier.
-- Next: Phase 5 (learning loop). Retrain the detector on tray frames later (PLAN.md).
+- Phase 5: classifier learning loop live since 2026-10-18 22:46. It retrains a minute
+  after answers stop, gated (see Conventions), and posts a weekly report on Sundays. Left:
+  confirm a retrain after a real tap, then the detector retrain on tray frames once
+  there are a few hundred tray visits (PLAN.md).
 
 ## Commands
 
@@ -43,7 +46,8 @@ uv sync                          # .venv, Python 3.13
 uv run fountain-buddy check      # settings + camera login
 uv run fountain-buddy run        # the service (camera, models, Discord), one process
 uv run fountain-buddy status     # is it up? launchd state, last start, warnings, camera
-uv run fountain-buddy train-head # retrain the classifier on every label; hot-reloaded
+uv run fountain-buddy train-head [--force]  # gated retrain (the service does this itself)
+uv run fountain-buddy report     # the weekly agreement report, last 7 days
 uv run fountain-buddy post-test IMAGE   # post a TEST sighting (source='test', never trained)
 uv run fountain-buddy import-legacy     # v1 import (idempotent; already done)
 uv run fountain-buddy bakeoff [--detectors]   # Phase 3 comparisons -> data/reports/
@@ -126,6 +130,12 @@ launchd/install.sh uninstall
 - **Python 3.13, uv-managed.** No TensorFlow. PyTorch on MPS.
 - **Measure models on our own photos, split by time** (older to train, newer to test). A
   retrained model replaces the current one only if it scores at least as well.
+  - For the classifier, `classifier.retrain` enforces that. Both heads are fit without
+    the gate set (the newest 20% of labels the current head had) and scored on it.
+    "As well" means top-1 and top-3 within 0.5 points: two new answers moved top-1 by
+    2 of 698 crops on the first live run. Every attempt goes in the `trainings` table.
+  - The weekly report's agreement is the honest live score: every guess was made
+    before its answer existed. Judge the model by that, not by held-out numbers.
 - Run `pytest` before every commit. After a search-and-replace edit, grep to confirm it
   landed.
 
@@ -226,6 +236,8 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-18 | Retrain after every answer (debounced 60 s), not nightly. A whole retrain takes ~3 s, so there is no reason to make new tray species wait a day. The gate compares like with like (same held-out rows, neither model trained on them) instead of each head's own held-out score, which would drift as tray photos (a harder, newer scene) take over the test split and then block learning for no real reason. | done |
+| 2026-10-18 | Tray answers carry the same weight as v1's 3,489 legacy answers, so the new scene is ~0.1% of the training set at first. If the weekly report shows tray agreement lagging, up-weight live labels (e.g. ×3) and let the gate judge it. | open |
 | 2026-10-18 | Night IR frames trip motion at max sensitivity (about 55 empty bursts after dusk on day one). Harmless: no posts, ~0.2 s of compute each, rejects pruned after 7 days. Could skip bursts while the camera is in night mode if it ever matters. | open |
 | 2026-10-18 | Liveness: suggested healthchecks.io (it catches a dead Mini, which nothing on the Mini can report). Adam: overkill. Instead the bot answers `status` in Discord, and `fountain-buddy status` covers the terminal. Known gap: if the whole Mini or the service is down, nothing posts, so a silent channel for days during busy bird season is the hint to type `status`. | declined (healthchecks); done (status) |
 | 2026-10-18 | Start a fresh public repo instead of rewriting v1's history. A force-push leaves the old commits reachable by SHA on GitHub, and rotating the secrets is the real fix anyway. v1 was renamed `fountain-buddy-legacy`, made private and archived. This repo took the name. | done |

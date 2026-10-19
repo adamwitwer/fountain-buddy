@@ -177,7 +177,12 @@ git ever tracks an image, database, `.env` or plist.
         `fountain-buddy report`. It covers first-guess agreement, whether the answer was
         a button, per species, mix-ups, and retrains. Every guess was made before its
         answer existed, so this is the honest live score.
-  - [ ] Deploy and see it retrain on a real answer.
+  - [x] 2026-10-18 22:46: deployed. The startup retrain picked up Adam's two wren
+        answers. Gate: top-1 81.4% vs 81.7% on 698 crops (2 crops apart, within
+        tolerance; a strict >= would have refused 2 correct answers), top-3 98.7%
+        vs 98.6%. Accepted, live as `head-20261018-224659`, about 3 s end to end.
+  - [ ] See it retrain after a real tap in Discord (the startup path is verified;
+        the tap hook is one callback).
 - [ ] Retrain the detector on tray frames once there are a few hundred labeled visits:
       the bird boxes the live detector found (checked by Adam's label), plus empty tray
       frames from `data/rejects/` as negatives so the cable and seed stop scoring. Test
