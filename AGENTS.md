@@ -40,6 +40,14 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
   once there are a few hundred tray visits (PLAN.md).
 - Night visitors: mice set off the detector around 03:00 on 2026-10-19 (detector conf
   0.11–0.18). Adam answers them "Not a bird".
+- **Known not-a-bird spots** (2026-10-19). In low light the tray's bracket kept scoring as
+  a bird. That was 14 posts of the same box, (1728,1580)–(2138,1813), mostly at dusk. A
+  detection whose box matches (IoU >= 0.7) a box Adam answered "Not a bird" in the last
+  30 days is now dropped unless the classifier's first guess is a species or Squirrel. A
+  bird elsewhere in the burst beats any detection on a spot. Dropped frames go to
+  `data/rejects/<day>/*-spot.jpg`, and `status` counts them. Replayed on all 34 live
+  visits before deploying: every bracket post dropped, all 5 wrens kept; first live drop
+  at 19:06 the same day.
 
 ## Commands
 
@@ -238,6 +246,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-19 | Drop detections at known not-a-bird spots rather than raising the detector threshold or trusting the classifier alone. The bracket scored up to 0.44, above two real wrens (0.23, 0.27), so no threshold separates them. And "classifier says Not a bird" alone would hide a dim bird it gets wrong. Requiring both the spot (from Adam's answers) and a non-species guess keeps a cardinal on the bracket visible. | done |
 | 2026-10-18 | Retrain after every answer (debounced 60 s), not nightly. A whole retrain takes ~3 s, so there is no reason to make new tray species wait a day. The gate compares like with like (same held-out rows, neither model trained on them) instead of each head's own held-out score, which would drift as tray photos (a harder, newer scene) take over the test split and then block learning for no real reason. | done |
 | 2026-10-18 | Tray answers carry the same weight as v1's 3,489 legacy answers, so the new scene is ~0.1% of the training set at first. If the weekly report shows tray agreement lagging, up-weight live labels (e.g. ×3) and let the gate judge it. | open |
 | 2026-10-18 | Night IR frames trip motion at max sensitivity (about 55 empty bursts after dusk on day one). Harmless: no posts, ~0.2 s of compute each, rejects pruned after 7 days. Could skip bursts while the camera is in night mode if it ever matters. | open |

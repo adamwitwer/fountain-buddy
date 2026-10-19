@@ -182,3 +182,74 @@ def test_status_text(tmp_path):
     stale = status_text(cfg, now - 7200, now - 3600, "d", "h", now=now)
     assert "last OK 60 min ago ⚠️" in stale
     assert "never reached since start ⚠️" in status_text(cfg, now, 0.0, "d", "h", now=now)
+
+
+class SaysClassifier:
+    version = "head-test.joblib"
+
+    def __init__(self, label):
+        self.label = label
+
+    def predict(self, crop):
+        return [(self.label, 0.97), ("Skip", 0.02), ("House Finch", 0.01)]
+
+
+def _not_a_bird_at(store, box, day="2026-10-19T12:03:31"):
+    db.init(store)
+    with closing(db.connect(store)) as conn:
+        vid = conn.execute(
+            "INSERT INTO visits (taken_at, camera, source) VALUES (?, 'tray', 'live')", (day,)
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO crops (visit_id, method, x1, y1, x2, y2, path) "
+            "VALUES (?, 'd', ?, ?, ?, ?, 'c.jpg')",
+            (vid, *box),
+        )
+        conn.execute(
+            "INSERT INTO labels (visit_id, label, source, labeled_at) "
+            "VALUES (?, 'Not a bird', 'discord', ?)",
+            (vid, day),
+        )
+        conn.commit()
+
+
+BRACKET = (1728, 1580, 2138, 1813)  # the box from 2026-10-19's dusk posts, at 4K
+NEAR_BRACKET = Detection(173, 158, 214, 181, 0.38)  # the same spot on a 1280-wide frame
+
+
+def test_known_not_a_bird_spot_is_ignored(tmp_path):
+    store = tmp_path / "fb.db"
+    _not_a_bird_at(store, tuple(v // 10 for v in BRACKET))
+    pipe = Pipeline(
+        store, tmp_path, FakeDetector([[NEAR_BRACKET]] * 2), SaysClassifier("Not a bird")
+    )
+    when = dt.datetime(2026, 10, 19, 18, 40, 2)
+    assert pipe.process(_frames(2), now=when) is None
+    assert (tmp_path / "rejects" / "2026-10-19" / "184002-spot.jpg").exists()
+
+
+def test_a_bird_on_a_known_spot_still_posts(tmp_path):
+    store = tmp_path / "fb.db"
+    _not_a_bird_at(store, tuple(v // 10 for v in BRACKET))
+    pipe = Pipeline(
+        store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Northern Cardinal")
+    )
+    assert pipe.process(_frames(1)) is not None
+
+
+def test_a_bird_elsewhere_beats_a_more_confident_spot(tmp_path):
+    store = tmp_path / "fb.db"
+    _not_a_bird_at(store, tuple(v // 10 for v in BRACKET))
+    bird = Detection(500, 100, 600, 180, 0.15)
+    pipe = Pipeline(
+        store, tmp_path, FakeDetector([[NEAR_BRACKET, bird]]), SaysClassifier("House Finch")
+    )
+    sighting = pipe.process(_frames(1))
+    assert sighting.det_conf == 0.15
+
+
+def test_old_not_a_bird_answers_expire(tmp_path):
+    store = tmp_path / "fb.db"
+    _not_a_bird_at(store, tuple(v // 10 for v in BRACKET), day="2026-08-01T12:00:00")
+    pipe = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
+    assert pipe.process(_frames(1), now=dt.datetime(2026, 10, 19, 18, 0, 0)) is not None

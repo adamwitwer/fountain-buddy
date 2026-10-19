@@ -137,14 +137,17 @@ def status_text(cfg: Settings, started: float, camera_ok: float, detector: str,
     if trained:
         age = now - dt.datetime.fromisoformat(trained["trained_at"]).timestamp()
         learning = f"last retrain {_ago(age)} ago, {trained['reason']}"
-    rejects = len(list((cfg.data_dir / "rejects" / today).glob("*.jpg")))
+    day_rejects = cfg.data_dir / "rejects" / today
+    spots = len(list(day_rejects.glob("*-spot.jpg")))
+    rejects = len(list(day_rejects.glob("*.jpg"))) - spots
     sighting = "none yet"
     if last:
         sighting = f"{_ago(now - dt.datetime.fromisoformat(last[0]).timestamp())} ago"
     return "\n".join([
         f"🟢 Running for {_ago(now - started)}.",
         f"Camera: {camera_line}",
-        f"Today: {posts} birds posted, {rejects} motion bursts with no bird",
+        f"Today: {posts} birds posted, {rejects} motion bursts with no bird, "
+        f"{spots} ignored at known not-a-bird spots",
         f"Last bird: {sighting}",
         f"Models: {detector}, {head}",
         f"Learning: {learning}",

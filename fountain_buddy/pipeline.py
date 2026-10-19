@@ -2,6 +2,10 @@
 
 Frames are saved unmarked. Only the Discord preview has a box drawn on it, so photos stay
 usable as training data (v1 drew into the originals).
+
+Known not-a-bird spots: a box Adam answered "Not a bird" (the tray's bracket at dusk, the
+camera cable) keeps scoring as a bird. A detection on such a spot is dropped unless the
+classifier's first guess is a species, so a bird standing on the bracket still posts.
 """
 
 from __future__ import annotations
@@ -16,14 +20,17 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from fountain_buddy import db
+from fountain_buddy import db, species
 from fountain_buddy.classifier import Classifier
-from fountain_buddy.detect import Detection, Detector
+from fountain_buddy.detect import Detection, Detector, iou
 
 log = logging.getLogger(__name__)
 
 PREVIEW_WIDTH = 1600
 REJECTS_KEPT_DAYS = 7
+SPOT_IOU = 0.7  # repeat detections of the bracket overlap each other at ~0.95
+SPOT_DAYS = 30
+POSTABLE = {*species.SPECIES, species.SQUIRREL}
 
 
 @dataclass(frozen=True)
@@ -35,13 +42,29 @@ class Sighting:
     preview_path: Path
 
 
-def best_detection(frames: list[np.ndarray], detector: Detector):
-    """(frame index, detection) with the most confident bird across the burst, or None."""
-    best: tuple[int, Detection] | None = None
+def not_bird_spots(store: Path, camera: str, now: dt.datetime) -> list[tuple[int, ...]]:
+    """Boxes of this camera's visits answered "Not a bird" in the last SPOT_DAYS."""
+    since = (now - dt.timedelta(days=SPOT_DAYS)).isoformat(timespec="seconds")
+    with closing(db.connect(store)) as conn:
+        rows = conn.execute(
+            "SELECT c.x1, c.y1, c.x2, c.y2 FROM crops c JOIN visits v ON v.id = c.visit_id "
+            "JOIN current_labels l ON l.visit_id = v.id "
+            "WHERE v.source = 'live' AND v.camera = ? AND l.label = ? AND v.taken_at >= ?",
+            (camera, species.NOT_A_BIRD, since),
+        ).fetchall()
+    return [tuple(r) for r in rows]
+
+
+def best_detection(frames: list[np.ndarray], detector: Detector, spots=()):
+    """(frame index, detection, on a known spot) for the best bird in the burst, or None.
+    Anything off the known not-a-bird spots beats anything on them; then confidence."""
+    best = None
     for i, frame in enumerate(frames):
-        for det in detector.birds(frame)[:1]:
-            if best is None or det.conf > best[1].conf:
-                best = (i, det)
+        for det in detector.birds(frame):
+            box = (det.x1, det.y1, det.x2, det.y2)
+            on_spot = any(iou(box, spot) >= SPOT_IOU for spot in spots)
+            if best is None or (not on_spot, det.conf) > (not best[2], best[1].conf):
+                best = (i, det, on_spot)
     return best
 
 
@@ -70,18 +93,24 @@ class Pipeline:
     def process(self, frames: list[np.ndarray], now: dt.datetime | None = None) -> Sighting | None:
         now = now or dt.datetime.now()
         stamp = now.strftime("%Y-%m-%d/%H%M%S")
-        found = best_detection(frames, self.detector)
+        spots = not_bird_spots(self.store, self.camera, now)
+        found = best_detection(frames, self.detector, spots)
         if found is None:
             # Keep one frame per empty burst for a week: detector misses show up here.
             self._save(f"rejects/{stamp}.jpg", frames[len(frames) // 2], quality=85)
             log.info("burst: no bird in %d frames", len(frames))
             return None
-        idx, det = found
+        idx, det, on_spot = found
         frame = frames[idx]
         h, w = frame.shape[:2]
         x1, y1, x2, y2 = max(det.x1, 0), max(det.y1, 0), min(det.x2, w), min(det.y2, h)
         crop = frame[y1:y2, x1:x2]
         ranked = self.classifier.predict(crop)
+        if on_spot and ranked[0][0] not in POSTABLE:
+            self._save(f"rejects/{stamp}-spot.jpg", preview(frame, det), quality=85)
+            log.info("burst: only a known not-a-bird spot (%s %.0f%%, bird %.2f)",
+                     ranked[0][0], 100 * ranked[0][1], det.conf)  # fmt: skip
+            return None
 
         frame_rel = f"images/{self.camera}/{stamp}.jpg"
         self._save(frame_rel, frame, quality=95)
