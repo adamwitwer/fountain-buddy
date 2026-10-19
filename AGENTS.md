@@ -245,4 +245,4 @@ is one of: open / adopted / declined / done.
 | 2026-10-18 | Discord bot posts directly with buttons and a dropdown, tied to the message ID. This drops webhooks (two fewer secrets) and the filename-in-text matching. | adopted |
 | 2026-10-18 | Drop Gmail; the daily summary moves to Discord. Telegram may replace Discord later, so keep the notifier behind a small interface. | adopted (Adam) |
 | 2026-10-18 | Keep a NABirds subset for the tray species with no local labels yet (American Goldfinch, Dark-eyed Junco), as cold-start data. Archive the rest. | adopted |
-| 2026-10-18 | Added White-throated Sparrow to the dropdown (a common winter ground feeder in Black-capped Chickadee range) alongside the Red-breasted Nuthatch Adam approved. | open: Adam to confirm |
+| 2026-10-18 | Added White-throated Sparrow to the dropdown (a common winter ground feeder in Black-capped Chickadee range) alongside the Red-breasted Nuthatch Adam approved. | adopted (Adam, 2026-10-18) |

@@ -203,5 +203,4 @@ git ever tracks an image, database, `.env` or plist.
 
 ## Open questions
 
-- White-throated Sparrow was added to the dropdown as a likely winter ground feeder.
-  Keep it?
+- None right now. (Settled 2026-10-18: White-throated Sparrow stays in the dropdown.)
