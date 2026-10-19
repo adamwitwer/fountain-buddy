@@ -59,6 +59,19 @@ CREATE TABLE IF NOT EXISTS posts (
     posted_at  TEXT NOT NULL
 );
 
+-- Every classifier retrain, accepted or not (see classifier.retrain).
+CREATE TABLE IF NOT EXISTS trainings (
+    id           INTEGER PRIMARY KEY,
+    trained_at   TEXT NOT NULL,
+    head         TEXT,                       -- head file written; NULL if rejected
+    accepted     INTEGER NOT NULL,
+    labels       INTEGER NOT NULL,           -- labeled crops it trained on
+    new_labels   INTEGER NOT NULL,           -- labels the previous head had not seen
+    max_label_id INTEGER NOT NULL,           -- newest label it saw
+    gate         TEXT,                       -- JSON: candidate vs incumbent on the gate set
+    reason       TEXT NOT NULL
+);
+
 -- The current label for a visit is its most recent one.
 CREATE VIEW IF NOT EXISTS current_labels AS
     SELECT l.* FROM labels l

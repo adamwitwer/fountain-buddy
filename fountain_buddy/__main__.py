@@ -136,19 +136,22 @@ def post_test(image: str) -> int:
     return 0
 
 
-def train_head() -> int:
-    import json
+def train_head(force: bool) -> int:
     import logging
 
-    from fountain_buddy import classifier
+    from fountain_buddy import classifier, db
 
     logging.basicConfig(level=logging.INFO)
     cfg = settings()
-    path = classifier.train_head(cfg.db_path, cfg.data_dir)
-    meta = json.loads((cfg.models_dir / "head.json").read_text())
-    print(f"head: {path.name} on {meta['labels']} labels + {meta['nabirds']} NABirds")
-    print("held-out:", {k: round(v, 3) for k, v in meta["heldout"].items()})
-    return 0
+    db.init(cfg.db_path)
+    result = classifier.retrain(cfg.db_path, cfg.data_dir, force=force)
+    print(f"{result.reason}; current head: {result.head} ({result.new_labels} new labels)")
+    if result.gate:
+        for side in ("incumbent", "candidate"):
+            m = result.gate[side]
+            print(f"  gate {side}: top-1 {m['top1']:.1%}, top-3 {m['top3']:.1%} "
+                  f"on {result.gate['n']} crops")  # fmt: skip
+    return 0 if result.accepted or result.reason == "no new labels" else 1
 
 
 def bakeoff(models: list[str], detectors: bool = False) -> int:
@@ -178,7 +181,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub.add_parser("run", help="run the service: camera, models, Discord")
     sub.add_parser("status", help="is the service up? (launchd, log, camera)")
-    sub.add_parser("train-head", help="retrain the species classifier on every label")
+    p = sub.add_parser(
+        "train-head",
+        help="retrain the classifier (gated; the service does this by itself after answers)",
+    )
+    p.add_argument("--force", action="store_true", help="accept even if it scores worse")
     p = sub.add_parser("post-test", help="post one image to Discord as a TEST sighting")
     p.add_argument("image", help="a frame (v1 overlays are painted out first)")
     p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
@@ -197,7 +204,7 @@ def main(argv: list[str] | None = None) -> int:
 
         return service.main()
     if args.command == "train-head":
-        return train_head()
+        return train_head(args.force)
     if args.command == "post-test":
         return post_test(args.image)
     if args.command == "bakeoff":

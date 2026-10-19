@@ -159,7 +159,21 @@ git ever tracks an image, database, `.env` or plist.
 ### Phase 5: Learning loop
 
 - [ ] Retrain the small classifier as answers come in, accept only on equal or better
-      held-out results, and post the weekly agreement report.
+      held-out results, and post the weekly agreement report. Progress:
+  - [x] 2026-10-18: gated `classifier.retrain` (`train-head [--force]`), `trainings`
+        table, old heads pruned to 10. One fit takes 0.2 s and a whole retrain about
+        5 s, so it can run after every answer instead of nightly. **Gate:** the test
+        set is the newest 20% of the labels the current head already had. The current
+        head's labels and all labels are each fit without those rows and scored on
+        them. Accept if top-1 and top-3 are no more than 0.5 points worse. This asks
+        "do the new answers make it worse?" and can't block learning just because
+        tray photos are harder than v1's. Tested on synthetic features: good answers
+        accepted, 150 mislabels rejected, `--force` overrides.
+  - [ ] Service: retrain 60 s after the last answer (on the model thread), and once at
+        startup; post in Discord only when a retrain is rejected or fails.
+  - [ ] Weekly report in Discord (Sundays after the daily summary) and
+        `fountain-buddy report`.
+  - [ ] Deploy and see it retrain on a real answer.
 - [ ] Retrain the detector on tray frames once there are a few hundred labeled visits:
       the bird boxes the live detector found (checked by Adam's label), plus empty tray
       frames from `data/rejects/` as negatives so the cable and seed stop scoring. Test
