@@ -1,4 +1,5 @@
-"""Bird detection with Ultralytics YOLO (COCO class 14, "bird").
+"""Bird detection with Ultralytics YOLO: the "bird" class of whatever weights are loaded
+(14 in stock COCO weights, 0 in our fine-tuned single-class weights).
 
 Weights live in data/models/ (never the repo root, where Ultralytics would otherwise
 download them).
@@ -12,8 +13,6 @@ from pathlib import Path
 import numpy as np
 
 from fountain_buddy.embed import device
-
-COCO_BIRD = 14
 
 
 @dataclass(frozen=True)
@@ -38,11 +37,12 @@ class Detector:
         self.name = f"{Path(weights).stem}@{imgsz}"
         self.model = YOLO(str(models_dir / weights))
         self.imgsz, self.conf = imgsz, conf
+        self.bird_class = next(k for k, v in self.model.names.items() if v == "bird")
 
     def birds(self, frame: np.ndarray) -> list[Detection]:
         """Bird detections in a BGR frame, most confident first."""
         result = self.model.predict(
-            frame, imgsz=self.imgsz, conf=self.conf, classes=[COCO_BIRD],
+            frame, imgsz=self.imgsz, conf=self.conf, classes=[self.bird_class],
             device=device(), verbose=False,
         )[0]  # fmt: skip
         dets = [

@@ -137,8 +137,11 @@ git ever tracks an image, database, `.env` or plist.
 
 - [x] Detection: YOLO26 vs yolov8n, measured by how many labeled birds each finds. Best
       off-the-shelf is yolo26m@1280 at 54–71% recall, which is too low.
-- [ ] Fine-tune YOLO26 on our ~3,500 verified boxes (drawn lines inpainted out first).
-      Accept only if recall clearly beats 71% on a time-split test set.
+- [x] Fine-tune YOLO26 on our ~3,500 verified boxes (drawn lines inpainted out first).
+      **Rejected 2026-10-18.** YOLO26s@1280, 50 epochs (5.3 h): 99.5% recall on v1's
+      held-out frames, but it learned v1's old backgrounds. On the new tray scene it
+      missed one of the first two wrens and fired on the white cable (AGENTS.md, "Model
+      choices"). Redo once the tray has a few hundred labeled visits of its own.
 - [x] Classification: BioCLIP 2 head (local + NABirds) blended with zero-shot. 81.5%
       top-1, 98.3% top-3, 91.5% on birds; v1 was 7.3%.
 - [x] Pick, and record the numbers in AGENTS.md ("Model choices").
@@ -148,15 +151,19 @@ git ever tracks an image, database, `.env` or plist.
 - [x] Camera events → burst → detect → classify → Discord post with buttons (`9c2776f`).
       A test post rendered correctly; the service went live 2026-10-18 15:09, run from
       a Claude session until Phase 6 (launchd). Interim detector: yolo26m@1280, conf 0.1.
-- [ ] Swap in the fine-tuned detector (`data/models/detector.json`) if it beats 71%
-      recall on the held-out test frames. Training started 2026-10-18 15:00, about 6.5
-      min per epoch, 60 epochs max with early stopping.
+- [x] ~~Swap in the fine-tuned detector~~: not swapped (see Phase 3). Stock
+      yolo26m@1280, conf 0.1 stays. First real birds: two Carolina Wrens, 2026-10-18
+      18:28 and 18:29, both found, both guessed right, both confirmed by Adam.
 - [ ] Run alongside Adam for a few days before it counts.
 
 ### Phase 5: Learning loop
 
 - [ ] Retrain the small classifier as answers come in, accept only on equal or better
       held-out results, and post the weekly agreement report.
+- [ ] Retrain the detector on tray frames once there are a few hundred labeled visits:
+      the bird boxes the live detector found (checked by Adam's label), plus empty tray
+      frames from `data/rejects/` as negatives so the cable and seed stop scoring. Test
+      on the newest tray visits, never on v1's scenes alone.
 
 ### Phase 6: Run for real
 

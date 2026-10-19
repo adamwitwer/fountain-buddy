@@ -21,8 +21,9 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
   and every leaked secret has been rotated or revoked. Channel renamed `#tray-feeder`.
 - Phase 1: done. Fresh public repo, `.env` on the new key names, `check` passes.
 - Phase 2: done. v1's labels are in `data/fountain_buddy.db` (3,501 with crops).
-- Phase 3: done. BioCLIP 2 head + zero-shot (see "Model choices"). A fine-tuned
-  YOLO26s detector is training: `data/detector/runs/`, log in `data/detector/train.log`.
+- Phase 3: done. BioCLIP 2 head + zero-shot (see "Model choices"). The fine-tuned
+  YOLO26s detector was rejected: it learned v1's backgrounds and fails on the tray.
+  Stock yolo26m@1280 stays.
 - **The tray feeder was installed 2026-10-18.** Birds take days to discover a new
   feeder, so a quiet first few days is expected, not a fault. Camera motion detection is
   at maximum sensitivity (sensDef 1, i.e. 50/50 in the app) over the whole frame.
@@ -31,7 +32,9 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 - Phase 6: done. Live under launchd since 2026-10-18 16:19 (see "Deploying").
   healthchecks.io was declined; liveness is the Discord `status` reply plus the
   camera-down alert (README, "Is it running?").
-- Next: swap in the fine-tuned detector if it wins, then Phase 5 (learning loop).
+- First real birds: two Carolina Wrens at 18:28 and 18:29 on 2026-10-18, found by the
+  detector and guessed right by the classifier.
+- Next: Phase 5 (learning loop). Retrain the detector on tray frames later (PLAN.md).
 
 ## Commands
 
@@ -164,9 +167,25 @@ labeled (IoU >= 0.3 with v1's drawn box) on 400 labeled 4K photos:
 | yolo26l@1280 | 43.5% | 51.8% | 58.5% | |
 
 COCO birds score 0.15–0.3 on these frames, and some are called "cat". v1 got by
-because its burst kept the best of 5 frames at a low threshold. The plan: fine-tune
-YOLO26 on our ~3,500 verified boxes, with v1's drawn lines inpainted out first so the
-detector can't learn "green rectangle means bird". Interim: yolo26m@1280, conf 0.1.
+because its burst kept the best of 5 frames at a low threshold.
+
+**Those frames have v1's green boxes drawn on them, and the boxes hurt stock YOLO.** With
+the boxes inpainted out (623 held-out frames, `data/reports/detector-finetune-*.md`):
+
+| detector | recall @0.5 | @0.25 | @0.1 | ms |
+|---|---|---|---|---|
+| yolo26s@1280 stock | 67.1% | 82.2% | 90.0% | 21 |
+| yolo26m@1280 stock (**chosen**) | 85.2% | 92.9% | 94.9% | 43 |
+| yolo26s@1280 fine-tuned on v1 boxes | 99.5% | 99.7% | 99.8% | 21 |
+
+**The fine-tune was rejected anyway.** Every v1 frame came from the old fountain and
+peanut-feeder views, so the test set shared their backgrounds. On the tray scene (2
+wren visits, 69 empty frames) it missed one wren, scored the other 0.18, and fired on
+the white cable bundle at up to 0.27. Stock yolo26m found both wrens (0.19, 0.45) and
+nothing on the empty frames. Lesson: **a detector test set must include the current
+scene.** Retrain on tray frames once they exist (PLAN.md, Phase 5). Our fine-tuned
+weights use class 0 for "bird", stock COCO uses 14; `Detector` reads it from the
+weights' names.
 
 ## The camera (Tray Feeder)
 
@@ -207,6 +226,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-18 | Night IR frames trip motion at max sensitivity (about 55 empty bursts after dusk on day one). Harmless: no posts, ~0.2 s of compute each, rejects pruned after 7 days. Could skip bursts while the camera is in night mode if it ever matters. | open |
 | 2026-10-18 | Liveness: suggested healthchecks.io (it catches a dead Mini, which nothing on the Mini can report). Adam: overkill. Instead the bot answers `status` in Discord, and `fountain-buddy status` covers the terminal. Known gap: if the whole Mini or the service is down, nothing posts, so a silent channel for days during busy bird season is the hint to type `status`. | declined (healthchecks); done (status) |
 | 2026-10-18 | Start a fresh public repo instead of rewriting v1's history. A force-push leaves the old commits reachable by SHA on GitHub, and rotating the secrets is the real fix anyway. v1 was renamed `fountain-buddy-legacy`, made private and archived. This repo took the name. | done |
 | 2026-10-18 | Replace the TF CNN with frozen foundation-model features plus a small classifier trained on Adam's labels. The CNN was trained mostly on NABirds' professional photos and failed on the feeder camera. A small head retrains in seconds, so the model can learn after every few answers. BioCLIP 2 vs DINOv3 is decided by a bake-off on our data (Phase 3). | adopted |
