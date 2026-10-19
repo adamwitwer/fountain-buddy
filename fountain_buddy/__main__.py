@@ -154,6 +154,18 @@ def train_head(force: bool) -> int:
     return 0 if result.accepted or result.reason == "no new labels" else 1
 
 
+def report() -> int:
+    import datetime as dt
+
+    from fountain_buddy import db
+    from fountain_buddy import report as rep
+
+    cfg = settings()
+    db.init(cfg.db_path)
+    print(rep.weekly_text(cfg.db_path, cfg.models_dir, dt.date.today()) or "nothing posted")
+    return 0
+
+
 def bakeoff(models: list[str], detectors: bool = False) -> int:
     import datetime as dt
 
@@ -186,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         help="retrain the classifier (gated; the service does this by itself after answers)",
     )
     p.add_argument("--force", action="store_true", help="accept even if it scores worse")
+    sub.add_parser("report", help="the weekly agreement report, for the last 7 days")
     p = sub.add_parser("post-test", help="post one image to Discord as a TEST sighting")
     p.add_argument("image", help="a frame (v1 overlays are painted out first)")
     p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
@@ -205,6 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         return service.main()
     if args.command == "train-head":
         return train_head(args.force)
+    if args.command == "report":
+        return report()
     if args.command == "post-test":
         return post_test(args.image)
     if args.command == "bakeoff":

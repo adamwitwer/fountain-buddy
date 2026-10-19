@@ -199,6 +199,8 @@ class FeederBot(discord.Client):
         self.ready = asyncio.Event()
         # Set by the service: returns the text for a `status` message.
         self.status_provider = None
+        # Set by the service: called after every stored label (wakes the learner).
+        self.on_label = None
 
     async def setup_hook(self) -> None:
         self.add_dynamic_items(LabelButton, OtherSelect, ChangeButton)
@@ -225,6 +227,10 @@ class FeederBot(discord.Client):
             conn.commit()
         return message
 
+    def _labeled(self) -> None:
+        if self.on_label:
+            self.on_label()
+
     async def say(self, text: str) -> None:
         await (await self.channel()).send(text)
 
@@ -234,6 +240,7 @@ class FeederBot(discord.Client):
             return
         add_label(self.store, visit_id, label, interaction.user.display_name)
         log.info("visit %d labeled %r by %s", visit_id, label, interaction.user.display_name)
+        self._labeled()
         embed, view = render(visit_state(self.store, visit_id))
         await interaction.response.edit_message(embed=embed, view=view)
 
@@ -254,6 +261,7 @@ class FeederBot(discord.Client):
         visit_id = row[0]
         add_label(self.store, visit_id, label, message.author.display_name)
         log.info("visit %d labeled %r by %s (reply)", visit_id, label, message.author.display_name)
+        self._labeled()
         await message.add_reaction("✅" if label in species.LABELS else "🆕")
         original = await message.channel.fetch_message(message.reference.message_id)
         embed, view = render(visit_state(self.store, visit_id))

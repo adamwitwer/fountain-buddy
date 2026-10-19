@@ -132,3 +132,58 @@ def test_old_heads_are_pruned(world):
     result = classifier.retrain(store, data_dir)
     heads = sorted(p.name for p in models.glob("head-*.joblib"))
     assert len(heads) == classifier.KEEP_HEADS and result.head in heads
+
+
+def _post(store, truth, guess, day):
+    """A live post whose model ranked `guess` first and was answered `truth`."""
+    with closing(db.connect(store)) as conn:
+        vid = conn.execute(
+            "INSERT INTO visits (taken_at, camera, source) VALUES (?, 'tray', 'live')",
+            (f"{day}T09:00:00",),
+        ).lastrowid
+        ranked = [guess] + [s for s in BIRDS + [species.SKIP] if s != guess]
+        conn.execute(
+            "INSERT INTO predictions (visit_id, model, label, top_k, predicted_at) "
+            "VALUES (?, 'h', ?, ?, ?)",
+            (vid, guess, json.dumps([[s, 0.1] for s in ranked]), day),
+        )
+        conn.execute("INSERT INTO posts VALUES (?, ?, 1, ?)", (vid + 10_000, vid, day))
+        if truth:
+            conn.execute(
+                "INSERT INTO labels (visit_id, label, source, labeled_at) "
+                "VALUES (?, ?, 'discord', ?)",
+                (vid, truth, day),
+            )
+        conn.commit()
+
+
+def test_weekly_report(tmp_path):
+    import datetime as dt
+
+    from fountain_buddy import report
+
+    store = tmp_path / "fb.db"
+    db.init(store)
+    for _ in range(3):
+        _post(store, "Northern Cardinal", "Northern Cardinal", "2026-10-15")
+    _post(store, "House Finch", "Northern Cardinal", "2026-10-16")
+    _post(store, "American Goldfinch", "Northern Cardinal", "2026-10-17")  # not on a button
+    _post(store, species.SKIP, species.SKIP, "2026-10-18")
+    _post(store, None, "House Finch", "2026-10-18")  # unanswered
+    _post(store, "House Finch", "House Finch", "2026-10-09")  # the week before
+    with closing(db.connect(store)) as conn:
+        conn.executemany(
+            "INSERT INTO trainings (trained_at, accepted, labels, new_labels, max_label_id, "
+            "reason) VALUES (?, ?, 10, 1, 1, 'x')",
+            [("2026-10-16T10:00:00", 1), ("2026-10-17T10:00:00", 0)],
+        )
+        conn.commit()
+    text = report.weekly_text(store, tmp_path, dt.date(2026, 10, 18))
+    assert "7 photos, 6 answered" in text
+    assert "Birds: 5. First guess right on 3 (60%); your answer was a button on 4 (80%)" in text
+    assert "Last week: 100% first guess" in text
+    assert "Northern Cardinal 3/3" in text and "American Goldfinch 0/1" in text
+    assert "House Finch called Northern Cardinal" in text
+    assert "Skip: 1" in text
+    assert "retrained 1×, 1 rejected by the check" in text
+    assert report.weekly_text(store, tmp_path, dt.date(2026, 11, 30)) is None

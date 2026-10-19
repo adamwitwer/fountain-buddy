@@ -169,10 +169,14 @@ git ever tracks an image, database, `.env` or plist.
         "do the new answers make it worse?" and can't block learning just because
         tray photos are harder than v1's. Tested on synthetic features: good answers
         accepted, 150 mislabels rejected, `--force` overrides.
-  - [ ] Service: retrain 60 s after the last answer (on the model thread), and once at
-        startup; post in Discord only when a retrain is rejected or fails.
-  - [ ] Weekly report in Discord (Sundays after the daily summary) and
-        `fountain-buddy report`.
+  - [x] 2026-10-18: Service retrains 60 s after the last answer (on the model thread,
+        so never during a detection), and once at startup. It posts in Discord only
+        when a retrain is rejected or fails, and once more when it recovers. `status`
+        shows the last retrain.
+  - [x] 2026-10-18: Weekly report in Discord (Sundays after the daily summary) and
+        `fountain-buddy report`. It covers first-guess agreement, whether the answer was
+        a button, per species, mix-ups, and retrains. Every guess was made before its
+        answer existed, so this is the honest live score.
   - [ ] Deploy and see it retrain on a real answer.
 - [ ] Retrain the detector on tray frames once there are a few hundred labeled visits:
       the bird boxes the live detector found (checked by Adam's label), plus empty tray

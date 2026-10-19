@@ -16,7 +16,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, suppress
 
-from fountain_buddy import db, species
+from fountain_buddy import classifier, db, report, species
 from fountain_buddy.bot import FeederBot
 from fountain_buddy.camera import Camera
 from fountain_buddy.classifier import Classifier
@@ -30,6 +30,8 @@ POST_COOLDOWN_SECONDS = 45
 SUMMARY_AT = dt.time(20, 0)
 HEALTH_EVERY_SECONDS = 300
 CAMERA_DOWN_ALERT_SECONDS = 15 * 60
+RETRAIN_QUIET_SECONDS = 60  # retrain once answers stop for this long
+WEEKLY_REPORT_DAY = 6  # Sunday, after the daily summary
 
 # Used until data/models/detector.json names something better (the fine-tuned weights).
 DEFAULT_DETECTOR = {"weights": "yolo26m.pt", "imgsz": 1280, "conf": 0.1}
@@ -123,11 +125,18 @@ def status_text(cfg: Settings, started: float, camera_ok: float, detector: str,
         last = conn.execute(
             "SELECT taken_at FROM visits WHERE source = 'live' ORDER BY taken_at DESC LIMIT 1"
         ).fetchone()
+        trained = conn.execute(
+            "SELECT trained_at, reason FROM trainings ORDER BY id DESC LIMIT 1"
+        ).fetchone()
         posts = conn.execute(
             "SELECT COUNT(*) FROM posts p JOIN visits v ON v.id = p.visit_id "
             "WHERE v.source = 'live' AND v.taken_at >= ?",
             (today,),
         ).fetchone()[0]
+    learning = "no retrain yet"
+    if trained:
+        age = now - dt.datetime.fromisoformat(trained["trained_at"]).timestamp()
+        learning = f"last retrain {_ago(age)} ago, {trained['reason']}"
     rejects = len(list((cfg.data_dir / "rejects" / today).glob("*.jpg")))
     sighting = "none yet"
     if last:
@@ -138,6 +147,7 @@ def status_text(cfg: Settings, started: float, camera_ok: float, detector: str,
         f"Today: {posts} birds posted, {rejects} motion bursts with no bird",
         f"Last bird: {sighting}",
         f"Models: {detector}, {head}",
+        f"Learning: {learning}",
     ])  # fmt: skip
 
 
@@ -154,6 +164,9 @@ class Service:
         self.camera_alerted = False
         self.started = time.time()
         self.bot.status_provider = self.status
+        self.labeled = asyncio.Event()
+        self.bot.on_label = self.labeled.set
+        self.learning_alerted = False
 
     def status(self) -> str:
         return status_text(
@@ -184,7 +197,46 @@ class Service:
             text = summary_text(self.cfg.db_path, at.date())
             if text:
                 await self.bot.say(text)
+            if at.weekday() == WEEKLY_REPORT_DAY:
+                text = report.weekly_text(self.cfg.db_path, self.cfg.models_dir, at.date())
+                if text:
+                    await self.bot.say(text)
             self.pipeline.prune_rejects()
+
+    async def learner(self) -> None:
+        """Retrain the classifier once answers stop coming for a minute. Runs once at
+        startup too, for answers the current head hasn't seen. Silent unless a retrain
+        is rejected or fails."""
+        self.labeled.set()
+        loop = asyncio.get_running_loop()
+        while True:
+            await self.labeled.wait()
+            while self.labeled.is_set():  # wait out a run of taps
+                self.labeled.clear()
+                with suppress(TimeoutError):
+                    await asyncio.wait_for(self.labeled.wait(), RETRAIN_QUIET_SECONDS)
+            try:
+                result = await loop.run_in_executor(
+                    self.worker, classifier.retrain, self.cfg.db_path, self.cfg.data_dir
+                )
+            except Exception as exc:
+                log.exception("retrain failed")
+                if not self.learning_alerted:
+                    await self.bot.say(
+                        f"⚠️ Retraining failed ({type(exc).__name__}). The current model "
+                        "stays; details in the log."
+                    )
+                    self.learning_alerted = True
+                continue
+            if result.accepted and self.learning_alerted:
+                await self.bot.say(f"✅ Retraining works again: now on {result.head}.")
+                self.learning_alerted = False
+            elif result.reason.startswith("rejected") and not self.learning_alerted:
+                await self.bot.say(
+                    f"🔁 The latest answers didn't pass the retraining check ({result.reason}), "
+                    "so the model wasn't updated. If you mis-tapped, use Change on that post."
+                )
+                self.learning_alerted = True
 
     async def health(self) -> None:
         while True:
@@ -221,6 +273,7 @@ class Service:
             asyncio.create_task(self.camera.watch(self.on_motion), name="camera"),
             asyncio.create_task(self.daily(), name="daily"),
             asyncio.create_task(self.health(), name="health"),
+            asyncio.create_task(self.learner(), name="learner"),
         ]
         log.info("service: running")
         try:
