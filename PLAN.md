@@ -181,8 +181,9 @@ git ever tracks an image, database, `.env` or plist.
         answers. Gate: top-1 81.4% vs 81.7% on 698 crops (2 crops apart, within
         tolerance; a strict >= would have refused 2 correct answers), top-3 98.7%
         vs 98.6%. Accepted, live as `head-20261018-224659`, about 3 s end to end.
-  - [ ] See it retrain after a real tap in Discord (the startup path is verified;
-        the tap hook is one callback).
+  - [x] 2026-10-19 08:49: retrain after real taps verified. Adam answered 4 posts
+        between 08:47:30 and 08:48:35 (overnight mice and the tray's feet). One retrain
+        ran 62 s after the last tap, accepted on 3,495 labels.
 - [ ] Retrain the detector on tray frames once there are a few hundred labeled visits:
       the bird boxes the live detector found (checked by Adam's label), plus empty tray
       frames from `data/rejects/` as negatives so the cable and seed stop scoring. Test

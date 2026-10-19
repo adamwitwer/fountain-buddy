@@ -35,9 +35,11 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
 - First real birds: two Carolina Wrens at 18:28 and 18:29 on 2026-10-18, found by the
   detector and guessed right by the classifier.
 - Phase 5: classifier learning loop live since 2026-10-18 22:46. It retrains a minute
-  after answers stop, gated (see Conventions), and posts a weekly report on Sundays. Left:
-  confirm a retrain after a real tap, then the detector retrain on tray frames once
-  there are a few hundred tray visits (PLAN.md).
+  after answers stop, gated (see Conventions), and posts a weekly report on Sundays. A retrain
+  after real taps was verified 2026-10-19. Left: the detector retrain on tray frames
+  once there are a few hundred tray visits (PLAN.md).
+- Night visitors: mice set off the detector around 03:00 on 2026-10-19 (detector conf
+  0.11–0.18). Adam answers them "Not a bird".
 
 ## Commands
 
