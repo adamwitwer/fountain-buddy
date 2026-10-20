@@ -38,16 +38,28 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
   after answers stop, gated (see Conventions), and posts a weekly report on Sundays. A retrain
   after real taps was verified 2026-10-19. Left: the detector retrain on tray frames
   once there are a few hundred tray visits (PLAN.md).
-- Night visitors: mice set off the detector around 03:00 on 2026-10-19 (detector conf
-  0.11–0.18). Adam answers them "Not a bird".
+- Night visitors: a mouse works the tray all night. It made 94 posts overnight
+  2026-10-19/20, too many to answer one by one. **Infrared rule** (2026-10-20): the camera's
+  night frames are pure greyscale (mean HSV saturation 0; daylight 38–70), so an infrared
+  burst posts only if the classifier's first guess is a species or Squirrel. Otherwise
+  it goes to `data/rejects/<day>/*-night.jpg`, and `status` counts it. Night isn't "no
+  posts": the camera stays in infrared past sunrise, and a Carolina Wren came at 07:35
+  in infrared. Replayed with the then-current head: all 109 infrared non-birds dropped,
+  the wren kept.
+- First Northern Cardinals: 2026-10-20 11:56, then 4 posts at 16:40. Soft focus at that
+  distance (see the camera-placement log entry).
 - **Known not-a-bird spots** (2026-10-19). In low light the tray's bracket kept scoring as
   a bird. That was 14 posts of the same box, (1728,1580)–(2138,1813), mostly at dusk. A
-  detection whose box matches (IoU >= 0.7) a box Adam answered "Not a bird" in the last
-  30 days is now dropped unless the classifier's first guess is a species or Squirrel. A
+  detection whose box matches (IoU >= 0.5; 0.7 until 2026-10-20) a box Adam answered
+  "Not a bird" in the last 30 days is now dropped unless the classifier's first guess is a species or Squirrel. A
   bird elsewhere in the burst beats any detection on a spot. Dropped frames go to
   `data/rejects/<day>/*-spot.jpg`, and `status` counts them. Replayed on all 34 live
   visits before deploying: every bracket post dropped, all 5 wrens kept; first live drop
   at 19:06 the same day.
+  Loosened to IoU 0.5 on 2026-10-20 for an ivy sprig on the deck (bottom left) that
+  sways: its repeats overlap each other at IoU 0.2–0.9. Overlap with the smaller box
+  would be looser still, but in replay it dropped a wren standing inside the bracket's
+  box, so it's plain IoU.
 
 ## Commands
 
@@ -246,11 +258,12 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-20 | Handle the night mouse by camera mode, not by clock or by more answers. Infrared frames are exactly greyscale, so the signal is free and needs no sunrise table. Infrared posts need a species as first guess. Dropping every infrared burst would have lost a 07:35 wren. Answering each mouse "Not a bird" doesn't stop posts, because a moving mouse never matches a known spot. Rejected frames are kept 7 days in `rejects/` if a missed night bird ever needs checking. | done |
 | 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. | open |
 | 2026-10-19 | Drop detections at known not-a-bird spots rather than raising the detector threshold or trusting the classifier alone. The bracket scored up to 0.44, above two real wrens (0.23, 0.27), so no threshold separates them. And "classifier says Not a bird" alone would hide a dim bird it gets wrong. Requiring both the spot (from Adam's answers) and a non-species guess keeps a cardinal on the bracket visible. | done |
 | 2026-10-18 | Retrain after every answer (debounced 60 s), not nightly. A whole retrain takes ~3 s, so there is no reason to make new tray species wait a day. The gate compares like with like (same held-out rows, neither model trained on them) instead of each head's own held-out score, which would drift as tray photos (a harder, newer scene) take over the test split and then block learning for no real reason. | done |
 | 2026-10-18 | Tray answers carry the same weight as v1's 3,489 legacy answers, so the new scene is ~0.1% of the training set at first. If the weekly report shows tray agreement lagging, up-weight live labels (e.g. ×3) and let the gate judge it. | open |
-| 2026-10-18 | Night IR frames trip motion at max sensitivity (about 55 empty bursts after dusk on day one). Harmless: no posts, ~0.2 s of compute each, rejects pruned after 7 days. Could skip bursts while the camera is in night mode if it ever matters. | open |
+| 2026-10-18 | Night IR frames trip motion at max sensitivity (about 55 empty bursts after dusk on day one). Harmless: no posts, ~0.2 s of compute each, rejects pruned after 7 days. Could skip bursts while the camera is in night mode if it ever matters. | done (2026-10-20, see the 2026-10-20 entry) |
 | 2026-10-18 | Liveness: suggested healthchecks.io (it catches a dead Mini, which nothing on the Mini can report). Adam: overkill. Instead the bot answers `status` in Discord, and `fountain-buddy status` covers the terminal. Known gap: if the whole Mini or the service is down, nothing posts, so a silent channel for days during busy bird season is the hint to type `status`. | declined (healthchecks); done (status) |
 | 2026-10-18 | Start a fresh public repo instead of rewriting v1's history. A force-push leaves the old commits reachable by SHA on GitHub, and rotating the secrets is the real fix anyway. v1 was renamed `fountain-buddy-legacy`, made private and archived. This repo took the name. | done |
 | 2026-10-18 | Replace the TF CNN with frozen foundation-model features plus a small classifier trained on Adam's labels. The CNN was trained mostly on NABirds' professional photos and failed on the feeder camera. A small head retrains in seconds, so the model can learn after every few answers. BioCLIP 2 vs DINOv3 is decided by a bake-off on our data (Phase 3). | adopted |

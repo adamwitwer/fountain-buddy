@@ -6,6 +6,14 @@ usable as training data (v1 drew into the originals).
 Known not-a-bird spots: a box Adam answered "Not a bird" (the tray's bracket at dusk, the
 camera cable) keeps scoring as a bird. A detection on such a spot is dropped unless the
 classifier's first guess is a species, so a bird standing on the bracket still posts.
+A swaying ivy sprig lands a little differently each time (IoU 0.2-0.9 between repeats),
+so a spot matches at IoU 0.5. Matching on overlap with the smaller box would be looser
+still, but it dropped a wren standing inside the bracket's box in replay.
+
+Night: the camera switches to infrared after dark, and its frames are pure greyscale.
+No birds visit then, but mice do (94 posts in one night, 2026-10-19). An infrared burst
+posts only if the classifier's first guess is a species or Squirrel; the camera stays in
+infrared past sunrise, and a wren came at 07:35 that way.
 """
 
 from __future__ import annotations
@@ -28,9 +36,10 @@ log = logging.getLogger(__name__)
 
 PREVIEW_WIDTH = 1600
 REJECTS_KEPT_DAYS = 7
-SPOT_IOU = 0.7  # repeat detections of the bracket overlap each other at ~0.95
+SPOT_IOU = 0.5  # the bracket repeats at ~0.95, the ivy sprig at 0.5-0.9
 SPOT_DAYS = 30
 POSTABLE = {*species.SPECIES, species.SQUIRREL}
+INFRARED_SATURATION = 2  # mean HSV saturation: infrared frames are 0, daylight 38-70
 
 
 @dataclass(frozen=True)
@@ -66,6 +75,12 @@ def best_detection(frames: list[np.ndarray], detector: Detector, spots=()):
             if best is None or (not on_spot, det.conf) > (not best[2], best[1].conf):
                 best = (i, det, on_spot)
     return best
+
+
+def infrared(frame: np.ndarray) -> bool:
+    """True for the camera's night (infrared) mode, whose frames have no colour."""
+    small = cv2.resize(frame, (480, 270), interpolation=cv2.INTER_AREA)
+    return cv2.cvtColor(small, cv2.COLOR_BGR2HSV)[..., 1].mean() < INFRARED_SATURATION
 
 
 def preview(frame: np.ndarray, det: Detection) -> np.ndarray:
@@ -106,11 +121,14 @@ class Pipeline:
         x1, y1, x2, y2 = max(det.x1, 0), max(det.y1, 0), min(det.x2, w), min(det.y2, h)
         crop = frame[y1:y2, x1:x2]
         ranked = self.classifier.predict(crop)
-        if on_spot and ranked[0][0] not in POSTABLE:
-            self._save(f"rejects/{stamp}-spot.jpg", preview(frame, det), quality=85)
-            log.info("burst: only a known not-a-bird spot (%s %.0f%%, bird %.2f)",
-                     ranked[0][0], 100 * ranked[0][1], det.conf)  # fmt: skip
-            return None
+        if ranked[0][0] not in POSTABLE:
+            why = "spot" if on_spot else "night" if infrared(frame) else None
+            if why:
+                self._save(f"rejects/{stamp}-{why}.jpg", preview(frame, det), quality=85)
+                log.info("burst: %s, not a bird (%s %.0f%%, bird %.2f)",
+                         "known not-a-bird spot" if on_spot else "infrared",
+                         ranked[0][0], 100 * ranked[0][1], det.conf)  # fmt: skip
+                return None
 
         frame_rel = f"images/{self.camera}/{stamp}.jpg"
         self._save(frame_rel, frame, quality=95)

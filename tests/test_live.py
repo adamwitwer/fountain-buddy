@@ -38,8 +38,12 @@ class FakeClassifier:
         return RANKED
 
 
-def _frames(n=3):
-    return [np.full((720, 1280, 3), 90, np.uint8) for _ in range(n)]
+def _frames(n=3, colour=(60, 110, 150)):
+    """Daylight frames (BGR, saturated); colour=(90, 90, 90) is an infrared night frame."""
+    return [np.full((720, 1280, 3), colour, np.uint8) for _ in range(n)]
+
+
+NIGHT = (90, 90, 90)
 
 
 def test_pipeline_records_the_most_confident_bird(tmp_path):
@@ -179,6 +183,7 @@ def test_status_text(tmp_path):
     text = status_text(cfg, now - 7200, now - 30, "yolo26m@1280", "head-x.joblib", now=now)
     assert "Running for 2.0 h" in text and "last OK 30 s ago ✅" in text
     assert "Last bird: none yet" in text and "0 birds posted" in text
+    assert "0 night visitors ignored" in text
     stale = status_text(cfg, now - 7200, now - 3600, "d", "h", now=now)
     assert "last OK 60 min ago ⚠️" in stale
     assert "never reached since start ⚠️" in status_text(cfg, now, 0.0, "d", "h", now=now)
@@ -253,3 +258,33 @@ def test_old_not_a_bird_answers_expire(tmp_path):
     _not_a_bird_at(store, tuple(v // 10 for v in BRACKET), day="2026-08-01T12:00:00")
     pipe = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
     assert pipe.process(_frames(1), now=dt.datetime(2026, 10, 19, 18, 0, 0)) is not None
+
+
+def test_ivy_swaying_off_its_first_box_still_counts_as_the_spot(tmp_path):
+    store = tmp_path / "fb.db"
+    _not_a_bird_at(store, (61, 166, 101, 204))  # 2026-10-20's ivy sprig, 1/10 scale
+    swayed = Detection(46, 172, 93, 204, 0.18)  # IoU 0.51 with the answered box
+    pipe = Pipeline(store, tmp_path, FakeDetector([[swayed]]), SaysClassifier("Not a bird"))
+    assert pipe.process(_frames(1), now=dt.datetime(2026, 10, 20, 10, 39, 53)) is None
+
+
+def test_infrared_burst_that_is_not_a_bird_is_ignored(tmp_path):
+    store = tmp_path / "fb.db"
+    mouse = Detection(150, 130, 210, 180, 0.42)
+    pipe = Pipeline(store, tmp_path, FakeDetector([[mouse]]), SaysClassifier("Not a bird"))
+    when = dt.datetime(2026, 10, 20, 3, 23, 30)
+    assert pipe.process(_frames(1, NIGHT), now=when) is None
+    assert (tmp_path / "rejects" / "2026-10-20" / "032330-night.jpg").exists()
+
+
+def test_infrared_bird_still_posts(tmp_path):
+    store = tmp_path / "fb.db"
+    wren = Detection(200, 20, 285, 63, 0.54)  # 07:35, camera still in infrared
+    pipe = Pipeline(store, tmp_path, FakeDetector([[wren]]), SaysClassifier("Carolina Wren"))
+    assert pipe.process(_frames(1, NIGHT)) is not None
+
+
+def test_daylight_not_a_bird_off_any_spot_still_posts(tmp_path):
+    store = tmp_path / "fb.db"
+    pipe = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
+    assert pipe.process(_frames(1)) is not None
