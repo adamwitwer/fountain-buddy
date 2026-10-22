@@ -14,6 +14,7 @@ are a loose 16:9 crop around the bird, so a small one still shows up.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import html
 import logging
 import re
@@ -40,6 +41,15 @@ VISITORS = [*species.SPECIES, species.SQUIRREL]
 SITE = Path(__file__).parent / "site"  # birds.css and .htaccess, copied as-is
 IMAGE_NAME = re.compile(r"^\d+(-t)?\.jpg$")
 TONES = ("amber", "blue")
+# The homepage's space invader, two frames, as Watchlog draws it.
+INVADER = (
+    "M2 0h1v1H2zM8 0h1v1H8zM3 1h1v1H3zM7 1h1v1H7zM2 2h7v1H2zM1 3h2v1H1zM4 3h3v1H4zM8 3h2v1H8z"
+    "M0 4h11v1H0zM0 5h1v1H0zM2 5h7v1H2zM10 5h1v1h-1zM0 6h1v1H0zM2 6h1v1H2zM8 6h1v1H8z"
+    "M10 6h1v1h-1zM3 7h2v1H3zM6 7h2v1H6z",
+    "M2 0h1v1H2zM8 0h1v1H8zM0 1h1v1H0zM3 1h1v1H3zM7 1h1v1H7zM10 1h1v1h-1zM0 2h1v1H0z"
+    "M2 2h7v1H2zM10 2h1v1h-1zM0 3h3v1H0zM4 3h3v1H4zM8 3h3v1H8zM0 4h11v1H0zM1 5h9v1H1z"
+    "M2 6h1v1H2zM8 6h1v1H8zM1 7h1v1H1zM9 7h1v1H9z",
+)
 
 
 @dataclass(frozen=True)
@@ -247,12 +257,22 @@ def _score(store: Path, today: dt.date) -> str:
             f"{len(birds)} birds ({right / len(birds):.0%}).</p>")  # fmt: skip
 
 
+def _css_version() -> str:
+    """Changes when birds.css does. The host lets browsers keep CSS for an hour, so a
+    new stylesheet needs a new URL to show up with the page that expects it."""
+    return hashlib.sha256((SITE / "birds.css").read_bytes()).hexdigest()[:10]
+
+
 def render(visits: list[Visit], everyone: list[Visitor], img_dir: Path, now: dt.datetime,
            score: str) -> str:  # fmt: skip
     recent = [v for v in visits if v.end >= now - dt.timedelta(days=KEEP_DAYS)]
     parts = [
         '<header class="intro-block">',
-        '<p class="back"><a href="/">← adamwitwer.com</a></p>',
+        # The way back, as on Watchlog: the homepage's space invader, marching on hover.
+        '<a class="home" href="/">'
+        '<svg class="invader" viewBox="0 0 11 8" aria-hidden="true" focusable="false">'
+        f'<path class="f1" d="{INVADER[0]}"/><path class="f2" d="{INVADER[1]}"/></svg>'
+        "<span>adamwitwer.com</span></a>",
         '<p class="hello">Fountain Buddy</p>',
         "<h1>Who’s at the tray</h1>",
         '<p class="intro">A camera watches a tray feeder full of safflower seed. An AI '
@@ -343,7 +363,7 @@ def render(visits: list[Visit], everyone: list[Visitor], img_dir: Path, now: dt.
 <meta name="description" content="Birds at my tray feeder, identified by an AI and checked by me.">
 <link rel="icon" href="/assets/si.png">
 <link rel="stylesheet" href="/css/site.css">
-<link rel="stylesheet" href="birds.css">
+<link rel="stylesheet" href="birds.css?v={_css_version()}">
 </head>
 <body>
 <main class="wrap birds">

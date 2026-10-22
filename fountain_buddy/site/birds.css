@@ -12,13 +12,25 @@
 .birds a:has(> img) { display: block; }
 
 .intro-block { margin-bottom: clamp(2.5rem, 7vw, 3.5rem); }
-.back {
-  margin: 0 0 2rem;
-  font-size: 0.95rem;
-  font-weight: 600;
+
+/* Back to the homepage, styled as on Watchlog. site.css already draws the
+   invader and its two-frame march; here it follows the link's color and hover. */
+.home {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 1.75rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
 }
-.back a { text-decoration: none; }
-.back a:hover { color: var(--accent); }
+.home:hover { color: var(--accent); }
+.home .invader { width: 1.1rem; fill: currentColor; }
+.home:hover .invader .f1 { animation: frame 0.5s steps(1) infinite; }
+.home:hover .invader .f2 { animation: frame 0.5s steps(1) infinite reverse; }
+
 .updated {
   margin: 0;
   color: var(--muted);

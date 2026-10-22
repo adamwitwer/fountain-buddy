@@ -114,6 +114,7 @@ def test_build_keeps_recent_visits_and_each_visitors_best(store, tmp_path):
     assert "AI guessed a photo too blurry to use" in page
     assert "style=" not in page and "<script" not in page  # strict CSP on the host
     assert (out / "birds.css").exists() and (out / ".htaccess").exists()
+    assert f'href="birds.css?v={publish._css_version()}"' in page
     with Image.open(out / "img" / f"{recent}.jpg") as im:
         assert im.width == publish.FULL_WIDTH and not im.info.get("exif")
 
