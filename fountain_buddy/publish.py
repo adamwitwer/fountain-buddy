@@ -255,7 +255,7 @@ def render(visits: list[Visit], everyone: list[Visitor], img_dir: Path, now: dt.
         '<p class="back"><a href="/">← adamwitwer.com</a></p>',
         '<p class="hello">Fountain Buddy</p>',
         "<h1>Who’s at the tray</h1>",
-        '<p class="intro">A camera watches a tray of safflower seed on my deck. An AI '
+        '<p class="intro">A camera watches a tray feeder full of safflower seed. An AI '
         "guesses who dropped by, I tell it when it’s wrong, and it learns from every "
         "answer. I’ve checked every photo here. The camera is still finding its best "
         "angle, so forgive the soft focus.</p>",
