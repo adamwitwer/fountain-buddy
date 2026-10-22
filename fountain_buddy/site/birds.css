@@ -1,0 +1,134 @@
+/* The bird page at adamwitwer.com/birds/. It loads the homepage's /css/site.css
+   first, so the palette, type and dark mode come from there; this file only adds
+   what the page needs. No inline styles: the page runs under a strict CSP. */
+
+.birds img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.75rem;
+  background: var(--rule);
+}
+.birds a:has(> img) { display: block; }
+
+.intro-block { margin-bottom: clamp(2.5rem, 7vw, 3.5rem); }
+.back {
+  margin: 0 0 2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.back a { text-decoration: none; }
+.back a:hover { color: var(--accent); }
+.updated {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.birds section { margin-bottom: clamp(3rem, 8vw, 4.5rem); }
+.birds h2 { margin-bottom: 1rem; }
+.birds .lede { margin: -0.6rem 0 1.25rem; }
+.eyebrow {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- Latest visit ---------- */
+
+.latest figure {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.latest figcaption { padding: 1rem 0.5rem 0.4rem; }
+.latest .name {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.latest .meta { margin: 0.1rem 0 0.75rem; color: var(--muted); }
+.latest .ai {
+  display: block;
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.75rem;
+  font-size: 0.95rem;
+}
+
+/* ---------- Visitors and visits ---------- */
+
+.tiles,
+.visits {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tiles { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.visits { grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
+
+.tile,
+.visit {
+  padding: 0.5rem 0.5rem 0.85rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 1rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.tile:hover,
+.visit:hover {
+  transform: translateY(-3px);
+  border-color: var(--tone, var(--amber));
+  box-shadow: var(--shadow);
+}
+.tile h3,
+.visit h4 {
+  display: block;
+  margin: 0.7rem 0.35rem 0.1rem;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.tile h3::before { content: none; }
+.tile p,
+.visit .meta {
+  margin: 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.visit .ai {
+  display: inline-block;
+  margin: 0.55rem 0.35rem 0;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ai.agree { background: var(--blue-wash); color: var(--blue); }
+.ai.miss  { background: var(--amber-wash); color: var(--accent); }
+
+.birds .group { margin-top: 2rem; }
+.birds .group:first-of-type { margin-top: 0; }
+
+.birds footer { display: block; }
+.birds footer p + p { margin-top: 0.5rem; }
+.birds footer a {
+  font-weight: 600;
+  text-decoration-color: var(--amber);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .intro-block, .latest { animation: rise 0.7s ease-out both; }
+  .latest { animation-delay: 0.1s; }
+}

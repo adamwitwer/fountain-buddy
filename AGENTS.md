@@ -71,6 +71,7 @@ uv run fountain-buddy status     # is it up? launchd state, last start, warnings
 uv run fountain-buddy train-head [--force]  # gated retrain (the service does this itself)
 uv run fountain-buddy report     # the weekly agreement report, last 7 days
 uv run fountain-buddy post-test IMAGE   # post a TEST sighting (source='test', never trained)
+uv run fountain-buddy publish [--no-upload]   # build the public page; upload if configured
 uv run fountain-buddy import-legacy     # v1 import (idempotent; already done)
 uv run fountain-buddy bakeoff [--detectors]   # Phase 3 comparisons -> data/reports/
 uv run pytest                    # run before every commit
@@ -113,6 +114,33 @@ launchd/install.sh uninstall
   start before login anyway, so after a power cut it starts once Adam logs in.
 - Only one copy may run. Two would double-post and fight over button taps, so stop any
   `fountain-buddy run` in a terminal before installing.
+
+## The public page (adamwitwer.com/birds/)
+
+`fountain_buddy/publish.py` renders answered sightings into static files in
+`data/site/birds/` and uploads them. The service runs it a minute after answers stop,
+just before the retrain, and once at startup. Started 2026-10-22.
+
+- **Only answers are published.** A visit appears only if its current label is a species
+  or Squirrel. Skip, Not a bird, unanswered and TEST posts never do, so Adam has seen
+  every public photo. A relabel with Change takes it off at the next publish.
+- **A visit is a run of one visitor** with no gap over 10 minutes, shown by its frame
+  with the highest detector confidence. The page shows the last 10 days of visits, plus
+  each visitor's best photo ever, which stays after its visit ages out.
+- **Full frame for the big photo; a loose crop for thumbnails.** The bird is too close
+  for the lens, so tight crops are blurry; the full scene at 1280 px looks fine. Revisit
+  after the camera moves back (birds get smaller in frame). Pillow writes no EXIF.
+- **The guess shown is the visit's best photo's**, made before the answer existed.
+- **Upload:** `FB_PUBLISH_DEST` in `.env`, e.g. `nfsn:/home/public/birds`, where `nfsn`
+  is a Host in the Mini's `~/.ssh/config` with its own key. Empty means build only.
+  `publish._target` refuses any path not ending in `/birds`, because the push deletes:
+  after uploading images and then the page, it removes images in `birds/img/` the page
+  no longer uses (only names like `123.jpg` / `123-t.jpg`). Nothing else on the web host
+  is touched; the homepage repo's `deploy.sh` never uploads `/birds/`.
+- **The homepage owns the look.** The page links `/css/site.css` from the homepage, then
+  its own `birds.css` (`fountain_buddy/site/`). No inline script or style, because the
+  host serves it under the homepage's strict CSP.
+- A failed publish logs, posts one ⚠️ in Discord, and retries after the next answer.
 
 ## Conventions
 
@@ -262,6 +290,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-22 | Public page at adamwitwer.com/birds/, built here and pushed over SSH (like Watchlog from the Pi). Publish only human-answered species so nothing unchecked goes public; group bursts into visits (one titmouse made 22 posts in an hour); show the full frame, since crops are out of focus; show the AI's guess beside the answer, since the misses are the fun part. Keep 10 days plus each visitor's best (Adam). Later: let Adam pick a visitor's best photo in Discord; detector confidence sometimes picks a well-camouflaged dove. | done |
 | 2026-10-22 | The 0.5-point gate margin rejected ordinary refit wobble: one Tufted Titmouse answer flipped 11 of 723 gate crops, nearly all coin-flips into or out of Skip. Replaced with a paired sign test (p < 0.01) plus a 2-point backstop. The gate exists to catch floods of bad answers or a bug, which flip many crops one way; a single mis-tap is below the noise and is fixed with Change. The Discord alert now says the answers are kept rather than hinting at a mis-tap. | done |
 | 2026-10-20 | Handle the night mouse by camera mode, not by clock or by more answers. Infrared frames are exactly greyscale, so the signal is free and needs no sunrise table. Infrared posts need a species as first guess. Dropping every infrared burst would have lost a 07:35 wren. Answering each mouse "Not a bird" doesn't stop posts, because a moving mouse never matches a known spot. Rejected frames are kept 7 days in `rejects/` if a missed night bird ever needs checking. | done |
 | 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. 2026-10-21: Adam plans to move it higher, to the side and further back (same camera). The infrared rule doesn't depend on the view, so the mouse stays handled through the move. | open |

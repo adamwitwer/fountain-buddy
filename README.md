@@ -9,6 +9,8 @@ A feeder camera that identifies its visitors and gets better at it from your ans
 4. Discord gets the photo with the top guesses as buttons.
 5. You tap the right one (or Skip). That answer becomes training data; an unanswered
    post never does.
+6. Answered sightings go on a public page, [adamwitwer.com/birds](https://adamwitwer.com/birds/),
+   with the model's guess beside your answer.
 
 Version 2 is a rebuild started in October 2026. The plan and its progress are in
 [PLAN.md](PLAN.md); how to work on the code is in [AGENTS.md](AGENTS.md). Version 1 (two

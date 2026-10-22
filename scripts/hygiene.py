@@ -29,7 +29,13 @@ SECRET_PATTERNS = {
     "discord bot token": re.compile(r"\b[MNO][\w-]{23,27}\.[\w-]{6}\.[\w-]{27,}"),
 }
 # .env keys whose values are not secret and may legitimately appear in the repo.
-PUBLIC_ENV_KEYS = {"CAMERA_HOST", "CAMERA_USERNAME", "FB_DATA_DIR", "DISCORD_CHANNEL_ID"}
+PUBLIC_ENV_KEYS = {
+    "CAMERA_HOST",
+    "CAMERA_USERNAME",
+    "FB_DATA_DIR",
+    "DISCORD_CHANNEL_ID",
+    "FB_PUBLISH_DEST",
+}
 MIN_SECRET_LEN = 8
 
 

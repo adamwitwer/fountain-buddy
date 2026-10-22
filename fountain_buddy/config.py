@@ -24,6 +24,7 @@ class Settings:
     discord_token: str = ""
     discord_channel_id: int | None = None
     healthcheck_url: str = ""
+    publish_dest: str = ""  # host:/path/birds for the public page; empty: build only
     data_dir: Path = REPO_ROOT / "data"
 
     @property
@@ -51,5 +52,6 @@ def settings() -> Settings:
         discord_token=os.getenv("DISCORD_BOT_TOKEN", ""),
         discord_channel_id=int(channel) if channel else None,
         healthcheck_url=os.getenv("HEALTHCHECK_URL", ""),
+        publish_dest=os.getenv("FB_PUBLISH_DEST", "").strip(),
         data_dir=Path(data_dir) if data_dir else REPO_ROOT / "data",
     )

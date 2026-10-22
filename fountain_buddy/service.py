@@ -16,7 +16,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, suppress
 
-from fountain_buddy import classifier, db, report, species
+from fountain_buddy import classifier, db, publish, report, species
 from fountain_buddy.bot import FeederBot
 from fountain_buddy.camera import Camera
 from fountain_buddy.classifier import Classifier
@@ -171,6 +171,7 @@ class Service:
         self.labeled = asyncio.Event()
         self.bot.on_label = self.labeled.set
         self.learning_alerted = False
+        self.publish_alerted = False
 
     def status(self) -> str:
         return status_text(
@@ -207,10 +208,29 @@ class Service:
                     await self.bot.say(text)
             self.pipeline.prune_rejects()
 
+    async def publish_page(self) -> None:
+        """Rebuild and upload the public page. Silent unless it fails, and then only
+        once until it works again."""
+        try:
+            summary = await asyncio.to_thread(publish.publish, self.cfg)
+        except Exception as exc:
+            log.exception("publish failed")
+            if not self.publish_alerted:
+                await self.bot.say(
+                    f"⚠️ Couldn't update the public bird page ({type(exc).__name__}). "
+                    "Details in the log; it retries after the next answer."
+                )
+                self.publish_alerted = True
+            return
+        log.info("publish: %s", summary)
+        if self.publish_alerted:
+            await self.bot.say("✅ The public bird page updates again.")
+            self.publish_alerted = False
+
     async def learner(self) -> None:
-        """Retrain the classifier once answers stop coming for a minute. Runs once at
-        startup too, for answers the current head hasn't seen. Silent unless a retrain
-        is rejected or fails."""
+        """Once answers stop coming for a minute, update the public page and retrain the
+        classifier. Runs once at startup too, for answers the current head hasn't seen.
+        Silent unless a retrain is rejected or fails, or the page can't be updated."""
         self.labeled.set()
         loop = asyncio.get_running_loop()
         while True:
@@ -219,6 +239,7 @@ class Service:
                 self.labeled.clear()
                 with suppress(TimeoutError):
                     await asyncio.wait_for(self.labeled.wait(), RETRAIN_QUIET_SECONDS)
+            await self.publish_page()
             try:
                 result = await loop.run_in_executor(
                     self.worker, classifier.retrain, self.cfg.db_path, self.cfg.data_dir
