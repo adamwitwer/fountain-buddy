@@ -154,8 +154,12 @@ launchd/install.sh uninstall
   retrained model replaces the current one only if it scores at least as well.
   - For the classifier, `classifier.retrain` enforces that. Both heads are fit without
     the gate set (the newest 20% of labels the current head had) and scored on it.
-    "As well" means top-1 and top-3 within 0.5 points: two new answers moved top-1 by
-    2 of 698 crops on the first live run. Every attempt goes in the `trainings` table.
+    "Worse" is a paired sign test on the gate crops: reject if the crops that got
+    worse outnumber the ones that got better beyond chance (one-sided p < 0.01), or if
+    the net drop is over 2 points, on top-1 or top-3. Until 2026-10-22 it was a fixed
+    0.5-point margin. That stalled learning: one new answer flipped 11 of 723
+    coin-flip crops (9 worse, 2 better; p 0.03, 1 point), and every answer after it was
+    rejected too. Every attempt goes in the `trainings` table, with the flip counts.
   - The weekly report's agreement is the honest live score: every guess was made
     before its answer existed. Judge the model by that, not by held-out numbers.
 - Run `pytest` before every commit. After a search-and-replace edit, grep to confirm it
@@ -258,6 +262,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-22 | The 0.5-point gate margin rejected ordinary refit wobble: one Tufted Titmouse answer flipped 11 of 723 gate crops, nearly all coin-flips into or out of Skip. Replaced with a paired sign test (p < 0.01) plus a 2-point backstop. The gate exists to catch floods of bad answers or a bug, which flip many crops one way; a single mis-tap is below the noise and is fixed with Change. The Discord alert now says the answers are kept rather than hinting at a mis-tap. | done |
 | 2026-10-20 | Handle the night mouse by camera mode, not by clock or by more answers. Infrared frames are exactly greyscale, so the signal is free and needs no sunrise table. Infrared posts need a species as first guess. Dropping every infrared burst would have lost a 07:35 wren. Answering each mouse "Not a bird" doesn't stop posts, because a moving mouse never matches a known spot. Rejected frames are kept 7 days in `rejects/` if a missed night bird ever needs checking. | done |
 | 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. 2026-10-21: Adam plans to move it higher, to the side and further back (same camera). The infrared rule doesn't depend on the view, so the mouse stays handled through the move. | open |
 | 2026-10-19 | Drop detections at known not-a-bird spots rather than raising the detector threshold or trusting the classifier alone. The bracket scored up to 0.44, above two real wrens (0.23, 0.27), so no threshold separates them. And "classifier says Not a bird" alone would hide a dim bird it gets wrong. Requiring both the spot (from Adam's answers) and a non-species guess keeps a cardinal on the bracket visible. | done |

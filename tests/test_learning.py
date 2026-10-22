@@ -72,11 +72,29 @@ def test_gate_split_holds_out_the_newest_known_rows():
     assert list(test) == [7, 8] and list(train) == [0, 1, 2, 4, 5, 6]
 
 
-def test_passes_within_tolerance():
-    inc = {"top1": 0.80, "top3": 0.95}
-    assert classifier.passes({"top1": 0.797, "top3": 0.95}, inc)
-    assert not classifier.passes({"top1": 0.79, "top3": 0.99}, inc)
-    assert not classifier.passes({"top1": 0.85, "top3": 0.94}, inc)
+def test_sign_test():
+    assert classifier.sign_test(0, 0) == 1.0
+    assert classifier.sign_test(1, 0) == 0.5
+    assert abs(classifier.sign_test(9, 2) - 67 / 2048) < 1e-12
+
+
+def test_coin_flip_wobble_passes_but_a_one_way_slide_does_not():
+    def hits(right):
+        return np.array(right, bool)
+
+    inc = {"top1": hits([1] * 9 + [0] * 2 + [1] * 700), "top3": hits([1] * 711)}
+    # 2026-10-22: one new answer flipped 11 of 723 gate crops, 9 worse and 2 better.
+    wobble = {"top1": hits([0] * 9 + [1] * 2 + [1] * 700), "top3": hits([1] * 711)}
+    changes = classifier.flips(inc, wobble)
+    assert changes["top1"] == {"worse": 9, "better": 2, "p": 0.0327, "drop": 0.0098}
+    assert classifier.passes(changes)
+    slide = {"top1": hits([0] * 9 + [1] * 2 + [0] * 10 + [1] * 690), "top3": hits([1] * 711)}
+    assert not classifier.passes(classifier.flips(inc, slide))  # 19 worse, 2 better
+    top3_slide = {"top1": inc["top1"], "top3": hits([0] * 8 + [1] * 703)}
+    assert not classifier.passes(classifier.flips(inc, top3_slide))  # 8 worse, 0 better
+    few = {"top1": hits([1] * 20 + [0] * 3), "top3": hits([1] * 23)}
+    big_drop = {"top1": hits([0] * 2 + [1] * 18 + [0] * 3), "top3": hits([1] * 23)}
+    assert not classifier.passes(classifier.flips(few, big_drop))  # p 0.25, but 8.7 points
 
 
 def test_retrain_learns_good_answers_and_rejects_bad_ones(world):

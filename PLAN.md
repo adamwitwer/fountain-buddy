@@ -165,7 +165,9 @@ git ever tracks an image, database, `.env` or plist.
         5 s, so it can run after every answer instead of nightly. **Gate:** the test
         set is the newest 20% of the labels the current head already had. The current
         head's labels and all labels are each fit without those rows and scored on
-        them. Accept if top-1 and top-3 are no more than 0.5 points worse. This asks
+        them. Accept unless top-1 or top-3 is clearly worse: a paired sign test
+        (p < 0.01) or a net drop over 2 points (a 0.5-point margin until 2026-10-22,
+        when refit wobble tripped it; see AGENTS.md). This asks
         "do the new answers make it worse?" and can't block learning just because
         tray photos are harder than v1's. Tested on synthetic features: good answers
         accepted, 150 mislabels rejected, `--force` overrides.

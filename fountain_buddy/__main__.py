@@ -151,6 +151,8 @@ def train_head(force: bool) -> int:
             m = result.gate[side]
             print(f"  gate {side}: top-1 {m['top1']:.1%}, top-3 {m['top3']:.1%} "
                   f"on {result.gate['n']} crops")  # fmt: skip
+        for k, f in result.gate["flips"].items():
+            print(f"  {k}: {f['worse']} crops worse, {f['better']} better, p={f['p']:.3f}")
     return 0 if result.accepted or result.reason == "no new labels" else 1
 
 

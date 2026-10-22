@@ -237,8 +237,10 @@ class Service:
                 self.learning_alerted = False
             elif result.reason.startswith("rejected") and not self.learning_alerted:
                 await self.bot.say(
-                    f"🔁 The latest answers didn't pass the retraining check ({result.reason}), "
-                    "so the model wasn't updated. If you mis-tapped, use Change on that post."
+                    f"🔁 The latest answers made the model clearly worse on photos it "
+                    f"already knew ({result.reason}), so it wasn't updated. Your answers "
+                    "are kept and count in the next retrain. If a batch of taps went "
+                    "wrong, use Change on those posts."
                 )
                 self.learning_alerted = True
 

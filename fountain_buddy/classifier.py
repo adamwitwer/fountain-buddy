@@ -10,6 +10,13 @@ does at least as well on the gate set: the newest 20% of the labels the current 
 already had. Both are fit without those rows, the incumbent on its own labels and the
 candidate on every label, so the comparison asks one question: do the new answers make
 the model worse on photos neither model has seen?
+
+"Worse" is a paired sign test, not a fixed margin. Any refit flips the coin-flip crops
+(45% vs 47%) both ways: on 2026-10-22 a single new answer flipped 11 of 723 gate crops,
+9 worse and 2 better, and a 0.5-point margin rejected it and every answer after it. The
+test asks whether the crops that got worse outnumber the ones that got better by more
+than chance (one-sided, p < GATE_ALPHA), on top-1 and on top-3. A net drop over
+GATE_MAX_DROP also rejects, for gate sets too small for the test to see anything.
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ import json
 import logging
 from contextlib import closing
 from dataclasses import dataclass
+from math import comb
 from pathlib import Path
 
 import cv2
@@ -35,8 +43,10 @@ NABIRDS_WEIGHT = 0.5
 C = 30.0
 ZERO_SHOT_ALPHA = 0.3
 TEST_FRACTION = 0.2
-# A few new labels move top-1 by a crop or two either way; half a point is that noise.
-GATE_TOLERANCE = 0.005
+# Strict on purpose: the gate is for floods of bad answers (or a bug), which flip dozens
+# of crops one way. One mis-tap is fixed with Change, not by the gate.
+GATE_ALPHA = 0.01
+GATE_MAX_DROP = 0.02  # net share of gate crops lost; 2026-10-22's wobble was 0.010
 GATE_METRICS = ("top1", "top3")
 KEEP_HEADS = 10
 
@@ -84,8 +94,29 @@ def gate_split(label_ids: np.ndarray, incumbent_max: int) -> tuple[np.ndarray, n
     return known[:cut], known[cut:]
 
 
-def passes(candidate: dict, incumbent: dict) -> bool:
-    return all(candidate[k] >= incumbent[k] - GATE_TOLERANCE for k in GATE_METRICS)
+def sign_test(worse: int, better: int) -> float:
+    """One-sided exact sign test: P(at least `worse` of the flipped crops got worse) if
+    each flip were a fair coin."""
+    n = worse + better
+    return sum(comb(n, k) for k in range(worse, n + 1)) / 2**n if n else 1.0
+
+
+def flips(incumbent: dict, candidate: dict) -> dict:
+    """Per metric: gate crops the candidate got wrong that the incumbent got right
+    (worse), the reverse (better), and the sign test's p."""
+    out = {}
+    for k in GATE_METRICS:
+        inc, cand = incumbent[k], candidate[k]
+        worse, better = int((inc & ~cand).sum()), int((~inc & cand).sum())
+        out[k] = {"worse": worse, "better": better, "p": round(sign_test(worse, better), 4),
+                  "drop": round((worse - better) / max(len(inc), 1), 4)}  # fmt: skip
+    return out
+
+
+def passes(changes: dict) -> bool:
+    return all(
+        changes[k]["p"] >= GATE_ALPHA and changes[k]["drop"] <= GATE_MAX_DROP for k in GATE_METRICS
+    )
 
 
 @dataclass
@@ -113,12 +144,20 @@ def _fit(x, y, x_nab, y_nab):
 
 
 def _score(head, x_test, y_test, zs_text) -> dict:
+    metrics, _ = _score_hits(head, x_test, y_test, zs_text)
+    return metrics
+
+
+def _score_hits(head, x_test, y_test, zs_text) -> tuple[dict, dict]:
+    """(metrics, per-crop hits {"top1": bool array, "top3": bool array})."""
     proba = blend_zero_shot(
         head.predict_proba(x_test), list(head.classes_), _zero_shot(x_test, zs_text)
     )
     metrics = bakeoff.evaluate(y_test, proba, head.classes_)
     metrics.pop("per_class")
-    return metrics
+    ranked = head.classes_[np.argsort(-proba, axis=1)]
+    hits = {"top1": ranked[:, 0] == y_test, "top3": (ranked[:, :3] == y_test[:, None]).any(1)}
+    return metrics, hits
 
 
 def _incumbent_max_label(store: Path, current: dict | None) -> int:
@@ -180,18 +219,21 @@ def retrain(store: Path, data_dir: Path, force: bool = False) -> Retrain:
     inc_train, test = gate_split(ids, incumbent_max)
     if current is not None and len(test):
         cand_train = np.setdiff1d(np.arange(len(rows)), test)
-        gate = {
-            "n": len(test),
-            "incumbent": _score(_fit(x[inc_train], y[inc_train], x_nab, y_nab),
-                                x[test], y[test], zs_text),
-            "candidate": _score(_fit(x[cand_train], y[cand_train], x_nab, y_nab),
-                                x[test], y[test], zs_text),
-        }  # fmt: skip
-        if not passes(gate["candidate"], gate["incumbent"]) and not force:
-            c, i = gate["candidate"], gate["incumbent"]
+        inc, inc_hits = _score_hits(_fit(x[inc_train], y[inc_train], x_nab, y_nab),
+                                    x[test], y[test], zs_text)  # fmt: skip
+        cand, cand_hits = _score_hits(_fit(x[cand_train], y[cand_train], x_nab, y_nab),
+                                      x[test], y[test], zs_text)  # fmt: skip
+        gate = {"n": len(test), "incumbent": inc, "candidate": cand,
+                "flips": flips(inc_hits, cand_hits)}  # fmt: skip
+        if not passes(gate["flips"]) and not force:
             reason = (
-                f"rejected: top-1 {c['top1']:.1%} vs {i['top1']:.1%}, "
-                f"top-3 {c['top3']:.1%} vs {i['top3']:.1%} on {len(test)} gate crops"
+                "rejected: "
+                + "; ".join(
+                    f"{k.replace('top', 'top-')} {cand[k]:.1%} vs {inc[k]:.1%} "
+                    f"({f['worse']} crops worse, {f['better']} better, p={f['p']:.3f})"
+                    for k, f in gate["flips"].items()
+                )
+                + f" on {len(test)} gate crops"
             )
             result = Retrain(False, reason, current_head, new, gate)
             _record(store, result, len(rows), int(ids.max()))
@@ -221,7 +263,7 @@ def retrain(store: Path, data_dir: Path, force: bool = False) -> Retrain:
     tmp.write_text(json.dumps(meta, indent=2))
     tmp.replace(pointer)  # atomic: the live Classifier never reads half a file
     reason = "accepted" if gate else "accepted (no current head to compare with)"
-    if force and gate and not passes(gate["candidate"], gate["incumbent"]):
+    if force and gate and not passes(gate["flips"]):
         reason = "forced past a failing gate"
     result = Retrain(True, reason, name, new, gate)
     _record(store, result, len(rows), meta["max_label_id"])
