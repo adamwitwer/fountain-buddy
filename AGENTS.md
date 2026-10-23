@@ -131,7 +131,8 @@ just before the retrain, and once at startup. Started 2026-10-22.
 - **Full frame for the big photo; a loose crop for thumbnails.** The bird is too close
   for the lens, so tight crops are blurry; the full scene at 1280 px looks fine. Revisit
   after the camera moves back (birds get smaller in frame). It moved 2026-10-23: a
-  cardinal is now ~100 px wide in a 1280-px full frame, so a loose crop may be better. Pillow writes no EXIF.
+  cardinal is now ~100 px wide in a 1280-px full frame, so a loose crop may be better.
+  Pillow writes no EXIF.
 - **The guess shown is the visit's best photo's**, made before the answer existed.
 - **Upload:** `FB_PUBLISH_DEST` in `.env`, e.g. `nfsn:/home/public/birds`, where `nfsn`
   is a Host in the Mini's `~/.ssh/config` with its own key. Empty means build only.
