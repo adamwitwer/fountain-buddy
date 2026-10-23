@@ -71,6 +71,7 @@ uv run fountain-buddy status     # is it up? launchd state, last start, warnings
 uv run fountain-buddy train-head [--force]  # gated retrain (the service does this itself)
 uv run fountain-buddy report     # the weekly agreement report, last 7 days
 uv run fountain-buddy post-test IMAGE   # post a TEST sighting (source='test', never trained)
+uv run fountain-buddy camera-moved [--at ISO] [--note TEXT]  # after a move: reset known spots
 uv run fountain-buddy publish [--no-upload]   # build the public page; upload if configured
 uv run fountain-buddy import-legacy     # v1 import (idempotent; already done)
 uv run fountain-buddy bakeoff [--detectors]   # Phase 3 comparisons -> data/reports/
@@ -129,7 +130,8 @@ just before the retrain, and once at startup. Started 2026-10-22.
   each visitor's best photo ever, which stays after its visit ages out.
 - **Full frame for the big photo; a loose crop for thumbnails.** The bird is too close
   for the lens, so tight crops are blurry; the full scene at 1280 px looks fine. Revisit
-  after the camera moves back (birds get smaller in frame). Pillow writes no EXIF.
+  after the camera moves back (birds get smaller in frame). It moved 2026-10-23: a
+  cardinal is now ~100 px wide in a 1280-px full frame, so a loose crop may be better. Pillow writes no EXIF.
 - **The guess shown is the visit's best photo's**, made before the answer existed.
 - **Upload:** `FB_PUBLISH_DEST` in `.env`, e.g. `nfsn:/home/public/birds`, where `nfsn`
   is a Host in the Mini's `~/.ssh/config` with its own key. Empty means build only.
@@ -262,6 +264,11 @@ Learned from v1 and the 2026-10-18 probe:
   "please login first" loop (token invalidated, never re-acquired). Use push events
   (Baichuan, port 9000, via `reolink_aio`) and re-login on auth errors.
 - HTTP `Snap` returns a full 4K JPEG (~0.8 MB). RTSP is on 554.
+- **Moved 2026-10-23 10:47-10:51** (offline while moving): higher, to the side and further
+  back. The tray is now a small target right of center (~360 px wide at 4K, was ~1,230),
+  and the frame is rolled ~25 degrees. Cardinal crops went from ~900-1,200 px to ~300-400 px
+  but are in focus. The first four new-view cardinals were guessed at 90-97%. Recorded with
+  `camera-moved`, so known spots from the old view stopped counting (61 were live).
 - Frames carry burned-in overlays: date/time top center, a Reolink watermark top left,
   "Tray Feeder" bottom right. The view is fisheye-ish.
 
@@ -293,7 +300,7 @@ is one of: open / adopted / declined / done.
 | 2026-10-22 | Public page at adamwitwer.com/birds/, built here and pushed over SSH (like Watchlog from the Pi). Publish only human-answered species so nothing unchecked goes public; group bursts into visits (one titmouse made 22 posts in an hour); show the full frame, since crops are out of focus; show the AI's guess beside the answer, since the misses are the fun part. Keep 10 days plus each visitor's best (Adam). Later: let Adam pick a visitor's best photo in Discord; detector confidence sometimes picks a well-camouflaged dove. | done |
 | 2026-10-22 | The 0.5-point gate margin rejected ordinary refit wobble: one Tufted Titmouse answer flipped 11 of 723 gate crops, nearly all coin-flips into or out of Skip. Replaced with a paired sign test (p < 0.01) plus a 2-point backstop. The gate exists to catch floods of bad answers or a bug, which flip many crops one way; a single mis-tap is below the noise and is fixed with Change. The Discord alert now says the answers are kept rather than hinting at a mis-tap. | done |
 | 2026-10-20 | Handle the night mouse by camera mode, not by clock or by more answers. Infrared frames are exactly greyscale, so the signal is free and needs no sunrise table. Infrared posts need a species as first guess. Dropping every infrared burst would have lost a 07:35 wren. Answering each mouse "Not a bird" doesn't stop posts, because a moving mouse never matches a known spot. Rejected frames are kept 7 days in `rejects/` if a missed night bird ever needs checking. | done |
-| 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. 2026-10-21: Adam plans to move it higher, to the side and further back (same camera). The infrared rule doesn't depend on the view, so the mouse stays handled through the move. | open |
+| 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. 2026-10-21: Adam plans to move it higher, to the side and further back (same camera). The infrared rule doesn't depend on the view, so the mouse stays handled through the move. 2026-10-23: moved; spots reset with `camera-moved`. Suggested leveling the ~25-degree roll. Still to do: compare guess accuracy and crop sharpness after a few days of new-view answers, then start the detector retrain on new-view frames once placement is final. | open |
 | 2026-10-19 | Drop detections at known not-a-bird spots rather than raising the detector threshold or trusting the classifier alone. The bracket scored up to 0.44, above two real wrens (0.23, 0.27), so no threshold separates them. And "classifier says Not a bird" alone would hide a dim bird it gets wrong. Requiring both the spot (from Adam's answers) and a non-species guess keeps a cardinal on the bracket visible. | done |
 | 2026-10-18 | Retrain after every answer (debounced 60 s), not nightly. A whole retrain takes ~3 s, so there is no reason to make new tray species wait a day. The gate compares like with like (same held-out rows, neither model trained on them) instead of each head's own held-out score, which would drift as tray photos (a harder, newer scene) take over the test split and then block learning for no real reason. | done |
 | 2026-10-18 | Tray answers carry the same weight as v1's 3,489 legacy answers, so the new scene is ~0.1% of the training set at first. If the weekly report shows tray agreement lagging, up-weight live labels (e.g. ×3) and let the gate judge it. | open |
