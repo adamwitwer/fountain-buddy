@@ -72,6 +72,15 @@ CREATE TABLE IF NOT EXISTS trainings (
     reason       TEXT NOT NULL
 );
 
+-- A camera was moved or re-aimed. Box positions from before it (known not-a-bird
+-- spots) belong to the old view and stop counting.
+CREATE TABLE IF NOT EXISTS camera_moves (
+    id       INTEGER PRIMARY KEY,
+    camera   TEXT NOT NULL,                  -- 'tray'
+    moved_at TEXT NOT NULL,                  -- local time, ISO 8601
+    note     TEXT
+);
+
 -- The current label for a visit is its most recent one.
 CREATE VIEW IF NOT EXISTS current_labels AS
     SELECT l.* FROM labels l

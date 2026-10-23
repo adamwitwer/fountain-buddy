@@ -6,6 +6,7 @@ usable as training data (v1 drew into the originals).
 Known not-a-bird spots: a box Adam answered "Not a bird" (the tray's bracket at dusk, the
 camera cable) keeps scoring as a bird. A detection on such a spot is dropped unless the
 classifier's first guess is a species, so a bird standing on the bracket still posts.
+Spots are positions in the frame, so they reset when the camera moves (`camera_moves`).
 A swaying ivy sprig lands a little differently each time (IoU 0.2-0.9 between repeats),
 so a spot matches at IoU 0.5. Matching on overlap with the smaller box would be looser
 still, but it dropped a wren standing inside the bracket's box in replay.
@@ -52,9 +53,15 @@ class Sighting:
 
 
 def not_bird_spots(store: Path, camera: str, now: dt.datetime) -> list[tuple[int, ...]]:
-    """Boxes of this camera's visits answered "Not a bird" in the last SPOT_DAYS."""
+    """Boxes of this camera's visits answered "Not a bird" in the last SPOT_DAYS, since
+    it was last moved."""
     since = (now - dt.timedelta(days=SPOT_DAYS)).isoformat(timespec="seconds")
     with closing(db.connect(store)) as conn:
+        moved = conn.execute(
+            "SELECT MAX(moved_at) FROM camera_moves WHERE camera = ? AND moved_at <= ?",
+            (camera, now.isoformat(timespec="seconds")),
+        ).fetchone()[0]
+        since = max(since, moved or "")
         rows = conn.execute(
             "SELECT c.x1, c.y1, c.x2, c.y2 FROM crops c JOIN visits v ON v.id = c.visit_id "
             "JOIN current_labels l ON l.visit_id = v.id "

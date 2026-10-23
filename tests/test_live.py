@@ -288,3 +288,17 @@ def test_daylight_not_a_bird_off_any_spot_still_posts(tmp_path):
     store = tmp_path / "fb.db"
     pipe = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
     assert pipe.process(_frames(1)) is not None
+
+
+def test_moving_the_camera_forgets_old_spots(tmp_path):
+    store = tmp_path / "fb.db"
+    _not_a_bird_at(store, tuple(v // 10 for v in BRACKET), day="2026-10-22T18:40:00")
+    with closing(db.connect(store)) as conn:
+        conn.execute(
+            "INSERT INTO camera_moves (camera, moved_at) VALUES ('tray', '2026-10-23T10:47:00')"
+        )
+        conn.commit()
+    before = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
+    assert before.process(_frames(1), now=dt.datetime(2026, 10, 23, 10, 0, 0)) is None
+    after = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
+    assert after.process(_frames(1), now=dt.datetime(2026, 10, 23, 11, 0, 0)) is not None

@@ -181,6 +181,26 @@ def publish(upload: bool) -> int:
     return 0
 
 
+def camera_moved(at: str | None, note: str | None) -> int:
+    import datetime as dt
+    from contextlib import closing
+
+    from fountain_buddy import db
+
+    cfg = settings()
+    db.init(cfg.db_path)
+    when = dt.datetime.fromisoformat(at) if at else dt.datetime.now()
+    with closing(db.connect(cfg.db_path)) as conn:
+        conn.execute(
+            "INSERT INTO camera_moves (camera, moved_at, note) VALUES ('tray', ?, ?)",
+            (when.isoformat(timespec="seconds"), note),
+        )
+        conn.commit()
+    print(f"recorded: tray camera moved at {when:%Y-%m-%d %H:%M:%S}; known not-a-bird "
+          "spots from before it no longer count")  # fmt: skip
+    return 0
+
+
 def bakeoff(models: list[str], detectors: bool = False) -> int:
     import datetime as dt
 
@@ -216,6 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("report", help="the weekly agreement report, for the last 7 days")
     p = sub.add_parser("publish", help="build the public bird page and upload it")
     p.add_argument("--no-upload", action="store_true", help="build in data/site/birds only")
+    p = sub.add_parser(
+        "camera-moved", help="the camera was moved: forget known not-a-bird spots before it"
+    )
+    p.add_argument("--at", help="when, as YYYY-MM-DDTHH:MM (default: now)")
+    p.add_argument("--note", help="what changed, for the record")
     p = sub.add_parser("post-test", help="post one image to Discord as a TEST sighting")
     p.add_argument("image", help="a frame (v1 overlays are painted out first)")
     p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
@@ -239,6 +264,8 @@ def main(argv: list[str] | None = None) -> int:
         return report()
     if args.command == "publish":
         return publish(not args.no_upload)
+    if args.command == "camera-moved":
+        return camera_moved(args.at, args.note)
     if args.command == "post-test":
         return post_test(args.image)
     if args.command == "bakeoff":
