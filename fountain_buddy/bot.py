@@ -3,6 +3,9 @@
 Buttons are discord.py DynamicItems keyed by custom_id ("fb:<action>:<visit>[:<label>]"),
 so posts keep working across restarts. A typed reply to a post works too. Only answers in
 the configured channel count, and only humans (not bots or webhooks) can label.
+
+An auto-accepted post (pipeline.AUTO_ACCEPT) shows the guess as accepted, with only a
+Change button. It has no label until someone uses Change.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ SKIP_WORDS = ("skip", "poor", "blur", "bad")
 COLOR_OPEN = 0x5865F2
 COLOR_DONE = 0x2ECC71
 COLOR_SKIP = 0x95A5A6
+COLOR_AUTO = 0x1ABC9C
 
 
 # -- the database side -------------------------------------------------------------
@@ -36,8 +40,9 @@ COLOR_SKIP = 0x95A5A6
 def visit_state(store: Path, visit_id: int) -> dict:
     with closing(db.connect(store)) as conn:
         visit = conn.execute(
-            "SELECT v.taken_at, v.camera, v.source, p.top_k FROM visits v "
+            "SELECT v.taken_at, v.camera, v.source, p.top_k, a.spot_check FROM visits v "
             "JOIN predictions p ON p.id = (SELECT MAX(id) FROM predictions WHERE visit_id = v.id) "
+            "LEFT JOIN auto_accepts a ON a.visit_id = v.id "
             "WHERE v.id = ?",
             (visit_id,),
         ).fetchone()
@@ -51,6 +56,7 @@ def visit_state(store: Path, visit_id: int) -> dict:
         "ranked": [tuple(x) for x in json.loads(visit["top_k"])],
         "label": label["label"] if label else None,
         "labeled_by": label["labeled_by"] if label else None,
+        "auto": visit["spot_check"] == 0,
     }
 
 
@@ -86,6 +92,16 @@ def render(state: dict) -> tuple[discord.Embed, discord.ui.View]:
     visit_id, ranked = state["visit_id"], state["ranked"]
     guess, p = ranked[0]
     image = f"attachment://visit-{visit_id}.jpg"
+    if state["label"] is None and state.get("auto"):
+        embed = discord.Embed(
+            title=f"☑️ {guess}  ({p:.0%})",
+            description=f"{_when(state)}\nAuto-accepted, not trained on · Change if it's wrong",
+            color=COLOR_AUTO,
+        )
+        embed.set_image(url=image)
+        view = discord.ui.View(timeout=None)
+        view.add_item(ChangeButton(visit_id))
+        return embed, view
     if state["label"] is None:
         title = f"{guess}?  ({p:.0%})" if guess in species.SPECIES else "Unclear photo. What is it?"
         others = ", ".join(f"{label} {q:.0%}" for label, q in ranked[1:4] if q >= 0.02)
@@ -183,6 +199,7 @@ class ChangeButton(discord.ui.DynamicItem[discord.ui.Button], template=r"fb:c:(?
         bot: FeederBot = interaction.client
         state = visit_state(bot.store, self.visit_id)
         state["label"] = None  # show the choices again; the old label stands until replaced
+        state["auto"] = False
         embed, view = render(state)
         await interaction.response.edit_message(embed=embed, view=view)
 

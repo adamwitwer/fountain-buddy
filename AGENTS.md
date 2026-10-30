@@ -61,6 +61,25 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
   would be looser still, but in replay it dropped a wren standing inside the bracket's
   box, so it's plain IoU.
 
+- **Repeats and auto-accept** (2026-10-29). Posts had reached ~240 a day (415 on
+  10-29), mostly the same bird again or an obvious guess. Now (`pipeline.py`):
+  - A burst whose first guess was posted in the last 5 minutes isn't posted. It goes to
+    `rejects/<day>/*-repeat.jpg`, and `status` counts it. A different guess still posts
+    after the 45 s cooldown. Replayed on 10-23..29: 1,682 posts became 658. A flat 5-min
+    cooldown would have hidden 283 posts whose answer differed from the one before.
+  - A species or Squirrel guess at >= 0.97 is posted as accepted (☑️, Change button only).
+    At 0.97: half the posts; 6 of 600 answered were wrong, 5 of those should have been
+    Skip, 1 the wrong species. **It is not a label** (table `auto_accepts`): it never
+    trains, never makes a known spot, and isn't in agreement scores. It is published.
+  - 1 in 10 of those (random) is a spot check, posted with the usual choices. The weekly
+    report shows spot-check accuracy and how many auto-accepts were changed. If spot
+    checks fall clearly below ~97%, raise the threshold.
+  - The weekly agreement now covers only posts that asked, so it drops relative to weeks
+    before 10-29 (it lost its easiest half). Not a regression.
+- **A new camera is coming** (Adam, 2026-10-29), for sharper images. When it's in:
+  `camera-moved`, recheck the detector on the new view, and recheck the 0.97 threshold
+  and repeat window, since confidence will shift with image quality.
+
 ## Commands
 
 ```bash
@@ -122,9 +141,12 @@ launchd/install.sh uninstall
 `data/site/birds/` and uploads them. The service runs it a minute after answers stop,
 just before the retrain, and once at startup. Started 2026-10-22.
 
-- **Only answers are published.** A visit appears only if its current label is a species
-  or Squirrel. Skip, Not a bird, unanswered and TEST posts never do, so Adam has seen
-  every public photo. A relabel with Change takes it off at the next publish.
+- **Only answers and auto-accepts are published.** A visit appears only if its current
+  label, or else its auto-accepted guess, is a species or Squirrel. Skip, Not a bird,
+  unanswered posts, unanswered spot checks and TEST posts never do. Auto-accepts are
+  posted in Discord too, so Adam has seen every public photo. A relabel with Change takes
+  it off at the next publish. An auto-accept also wakes the publisher (the retrain that
+  follows finds no new labels and does nothing).
 - **A visit is a run of one visitor** with no gap over 10 minutes, shown by its frame
   with the highest detector confidence. The page shows the last 10 days of visits, plus
   each visitor's best photo ever, which stays after its visit ages out.
@@ -305,10 +327,11 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-10-29 | Adam: too many repetitive or obviously right posts; raise the cooldown and auto-approve above ~96%. Agreed, with changes: hold back a repeat of the *same guess* within 5 min rather than every post (several species share the tray), and auto-accept at 0.97 without making it a label. Training on its own guesses would teach the model its mistakes, and the head learns little from crops it already gets right. Spot-check 1 in 10 so accuracy at the top stays measured as retrains shift calibration. Adam chose 5 min, 0.97, publish auto-accepts, spot checks. | done |
 | 2026-10-22 | Public page at adamwitwer.com/birds/, built here and pushed over SSH (like Watchlog from the Pi). Publish only human-answered species so nothing unchecked goes public; group bursts into visits (one titmouse made 22 posts in an hour); show the full frame, since crops are out of focus; show the AI's guess beside the answer, since the misses are the fun part. Keep 10 days plus each visitor's best (Adam). Later: let Adam pick a visitor's best photo in Discord; detector confidence sometimes picks a well-camouflaged dove. | done |
 | 2026-10-22 | The 0.5-point gate margin rejected ordinary refit wobble: one Tufted Titmouse answer flipped 11 of 723 gate crops, nearly all coin-flips into or out of Skip. Replaced with a paired sign test (p < 0.01) plus a 2-point backstop. The gate exists to catch floods of bad answers or a bug, which flip many crops one way; a single mis-tap is below the noise and is fixed with Change. The Discord alert now says the answers are kept rather than hinting at a mis-tap. | done |
 | 2026-10-20 | Handle the night mouse by camera mode, not by clock or by more answers. Infrared frames are exactly greyscale, so the signal is free and needs no sunrise table. Infrared posts need a species as first guess. Dropping every infrared burst would have lost a 07:35 wren. Answering each mouse "Not a bird" doesn't stop posts, because a moving mouse never matches a known spot. Rejected frames are kept 7 days in `rejects/` if a missed night bird ever needs checking. | done |
-| 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. 2026-10-21: Adam plans to move it higher, to the side and further back (same camera). The infrared rule doesn't depend on the view, so the mouse stays handled through the move. 2026-10-23: moved; spots reset with `camera-moved`. Suggested leveling the ~25-degree roll. Moved again the same day to a middle distance (tray ~750 px; see the camera section). Still to do: compare guess accuracy and crop sharpness after a few days of new-view answers, then start the detector retrain on new-view frames once placement is final. | open |
+| 2026-10-19 | Adam is weighing a new camera placement (or camera): the tray is too close for the fixed-focus lens to focus. Until it's settled, hold the detector retrain on tray frames. After a move: clear the known not-a-bird spots (their boxes belong to the old view), keep the classifier's tray labels (birds look the same), and compare crop sharpness before and after. A replacement should be a Reolink if possible, since `camera.py` relies on reolink_aio for motion events. 2026-10-21: Adam plans to move it higher, to the side and further back (same camera). The infrared rule doesn't depend on the view, so the mouse stays handled through the move. 2026-10-23: moved; spots reset with `camera-moved`. Suggested leveling the ~25-degree roll. Moved again the same day to a middle distance (tray ~750 px; see the camera section). Still to do: compare guess accuracy and crop sharpness after a few days of new-view answers, then start the detector retrain on new-view frames once placement is final. 2026-10-29: Adam is waiting on hardware for a different camera, for sharper images; hold the detector retrain until it's in. | open |
 | 2026-10-19 | Drop detections at known not-a-bird spots rather than raising the detector threshold or trusting the classifier alone. The bracket scored up to 0.44, above two real wrens (0.23, 0.27), so no threshold separates them. And "classifier says Not a bird" alone would hide a dim bird it gets wrong. Requiring both the spot (from Adam's answers) and a non-species guess keeps a cardinal on the bracket visible. | done |
 | 2026-10-18 | Retrain after every answer (debounced 60 s), not nightly. A whole retrain takes ~3 s, so there is no reason to make new tray species wait a day. The gate compares like with like (same held-out rows, neither model trained on them) instead of each head's own held-out score, which would drift as tray photos (a harder, newer scene) take over the test split and then block learning for no real reason. | done |
 | 2026-10-18 | Tray answers carry the same weight as v1's 3,489 legacy answers, so the new scene is ~0.1% of the training set at first. If the weekly report shows tray agreement lagging, up-weight live labels (e.g. ×3) and let the gate judge it. | open |

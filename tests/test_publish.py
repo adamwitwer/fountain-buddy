@@ -172,3 +172,35 @@ def test_thumb_region(box, expected):
     left, top, right, bottom = publish.thumb_region((3840, 2160), box)
     assert (left, top, right, bottom) == expected
     assert abs((right - left) / (bottom - top) - 16 / 9) < 0.01
+
+
+def _auto(store, vid, spot_check=0):
+    with closing(db.connect(store)) as conn:
+        conn.execute(
+            "INSERT INTO auto_accepts (visit_id, spot_check, decided_at) VALUES (?, ?, ?)",
+            (vid, spot_check, NOW.isoformat()),
+        )
+        conn.commit()
+
+
+def test_auto_accepts_are_published_but_unanswered_spot_checks_are_not(store, tmp_path):
+    auto = add(store, tmp_path, at(10), None, guess="Tufted Titmouse")
+    _auto(store, auto)
+    check = add(store, tmp_path, at(20), None, guess="Northern Cardinal")
+    _auto(store, check, spot_check=1)
+    changed = add(store, tmp_path, at(30), "Carolina Wren", guess="House Finch")
+    _auto(store, changed)
+    photos = {p.visit_id: p for p in publish.load_photos(store)}
+    assert set(photos) == {auto, changed}
+    assert photos[auto].label == "Tufted Titmouse" and photos[auto].auto
+    assert photos[changed].label == "Carolina Wren" and not photos[changed].auto
+
+
+def test_an_auto_accepted_visit_says_the_ai_made_the_call(store, tmp_path):
+    vid = add(store, tmp_path, at(10), None, guess="Tufted Titmouse", conf=0.9)
+    _auto(store, vid)
+    add(store, tmp_path, at(12), "Tufted Titmouse", conf=0.3)
+    (visit,) = publish.group_visits(publish.load_photos(store))
+    assert publish._verdict(visit) == ("agree", "AI's call (90%)")
+    text = publish._verdict_long(visit)
+    assert "so I let it make this call" in text and "Of the 1 photos I checked" in text

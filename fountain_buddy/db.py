@@ -72,6 +72,16 @@ CREATE TABLE IF NOT EXISTS trainings (
     reason       TEXT NOT NULL
 );
 
+-- Posts whose first guess was sure enough to stand without a tap (pipeline.AUTO_ACCEPT).
+-- Not labels: they never train anything and aren't in agreement scores. A spot check
+-- (a random share of them) is posted with the usual choices instead and stands only
+-- once answered. A later human answer always wins.
+CREATE TABLE IF NOT EXISTS auto_accepts (
+    visit_id   INTEGER PRIMARY KEY REFERENCES visits(id),
+    spot_check INTEGER NOT NULL,             -- 1: asked anyway
+    decided_at TEXT NOT NULL
+);
+
 -- A camera was moved or re-aimed. Box positions from before it (known not-a-bird
 -- spots) belong to the old view and stop counting.
 CREATE TABLE IF NOT EXISTS camera_moves (

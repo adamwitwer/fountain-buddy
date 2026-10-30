@@ -65,28 +65,31 @@ def summary_text(store, day: dt.date) -> str | None:
     start, end = day.isoformat(), (day + dt.timedelta(days=1)).isoformat()
     with closing(db.connect(store)) as conn:
         rows = conn.execute(
-            "SELECT v.id, l.label, p.label AS guess FROM visits v "
+            "SELECT v.id, l.label, p.label AS guess, a.spot_check FROM visits v "
             "JOIN posts ON posts.visit_id = v.id "
             "LEFT JOIN current_labels l ON l.visit_id = v.id "
             "LEFT JOIN predictions p "
             "ON p.id = (SELECT MAX(id) FROM predictions WHERE visit_id = v.id) "
+            "LEFT JOIN auto_accepts a ON a.visit_id = v.id "
             "WHERE v.source = 'live' AND v.taken_at >= ? AND v.taken_at < ?",
             (start, end),
         ).fetchall()
     if not rows:
         return None
     labeled = [r for r in rows if r["label"]]
+    auto = [r for r in rows if not r["label"] and r["spot_check"] == 0]
     birds = Counter(r["label"] for r in labeled if r["label"] in species.SPECIES)
-    right = sum(r["label"] == r["guess"] for r in labeled if r["label"] != species.SKIP)
-    judged = sum(r["label"] != species.SKIP for r in labeled)
-    lines = [
-        f"**Today at the tray** ({day:%a %b %-d}): {len(rows)} photos, {len(labeled)} answered"
-    ]
+    birds.update(r["guess"] for r in auto if r["guess"] in species.SPECIES)
+    asked = [r for r in labeled if r["label"] != species.SKIP and r["spot_check"] != 0]
+    right = sum(r["label"] == r["guess"] for r in asked)  # a changed auto-accept isn't fair
+    judged = len(asked)
+    head = f"**Today at the tray** ({day:%a %b %-d}): {len(rows)} photos, {len(labeled)} answered"
+    lines = [head + (f", {len(auto)} auto-accepted" if auto else "")]
     lines += [f"• {name}: {n}" for name, n in birds.most_common()]
     if judged:
         lines.append(f"Model agreed with you on {right}/{judged} ({right / judged:.0%}).")
-    if len(rows) > len(labeled):
-        lines.append(f"{len(rows) - len(labeled)} still unanswered.")
+    if len(rows) > len(labeled) + len(auto):
+        lines.append(f"{len(rows) - len(labeled) - len(auto)} still unanswered.")
     return "\n".join(lines)
 
 
@@ -128,11 +131,12 @@ def status_text(cfg: Settings, started: float, camera_ok: float, detector: str,
         trained = conn.execute(
             "SELECT trained_at, reason FROM trainings ORDER BY id DESC LIMIT 1"
         ).fetchone()
-        posts = conn.execute(
-            "SELECT COUNT(*) FROM posts p JOIN visits v ON v.id = p.visit_id "
+        posts, auto = conn.execute(
+            "SELECT COUNT(*), COUNT(a.visit_id) FROM posts p JOIN visits v ON v.id = p.visit_id "
+            "LEFT JOIN auto_accepts a ON a.visit_id = v.id AND a.spot_check = 0 "
             "WHERE v.source = 'live' AND v.taken_at >= ?",
             (today,),
-        ).fetchone()[0]
+        ).fetchone()
     learning = "no retrain yet"
     if trained:
         age = now - dt.datetime.fromisoformat(trained["trained_at"]).timestamp()
@@ -140,14 +144,16 @@ def status_text(cfg: Settings, started: float, camera_ok: float, detector: str,
     day_rejects = cfg.data_dir / "rejects" / today
     spots = len(list(day_rejects.glob("*-spot.jpg")))
     nights = len(list(day_rejects.glob("*-night.jpg")))
-    rejects = len(list(day_rejects.glob("*.jpg"))) - spots - nights
+    repeats = len(list(day_rejects.glob("*-repeat.jpg")))
+    rejects = len(list(day_rejects.glob("*.jpg"))) - spots - nights - repeats
     sighting = "none yet"
     if last:
         sighting = f"{_ago(now - dt.datetime.fromisoformat(last[0]).timestamp())} ago"
     return "\n".join([
         f"🟢 Running for {_ago(now - started)}.",
         f"Camera: {camera_line}",
-        f"Today: {posts} birds posted, {rejects} motion bursts with no bird, "
+        f"Today: {posts} birds posted ({auto} auto-accepted), {repeats} repeats held back, "
+        f"{rejects} motion bursts with no bird, "
         f"{spots} ignored at known not-a-bird spots, {nights} night visitors ignored",
         f"Last bird: {sighting}",
         f"Models: {detector}, {head}",
@@ -191,6 +197,8 @@ class Service:
         if sighting:
             await self.bot.post(sighting.visit_id, sighting.preview_path)
             self.last_post = time.time()
+            if sighting.auto_accepted:
+                self.labeled.set()  # it goes on the public page; the retrain finds nothing new
 
     async def daily(self) -> None:
         while True:

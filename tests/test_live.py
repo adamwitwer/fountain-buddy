@@ -5,6 +5,7 @@ import datetime as dt
 from contextlib import closing
 
 import numpy as np
+import pytest
 
 from fountain_buddy import bot, db, species
 from fountain_buddy.classifier import blend_zero_shot
@@ -94,10 +95,10 @@ def test_blend_keeps_non_species_mass():
     assert out[0, 1] > proba[0, 1]  # zero-shot pulled toward House Finch
 
 
-def _visit(store, label=None):
+def _visit(store, label=None, minute=5):
     pipe = Pipeline(store, store.parent, FakeDetector([[Detection(100, 100, 300, 200, 0.9)]]),
                     FakeClassifier())  # fmt: skip
-    s = pipe.process(_frames(1), now=dt.datetime(2026, 10, 19, 14, 5, 9))
+    s = pipe.process(_frames(1), now=dt.datetime(2026, 10, 19, 14, minute, 9))
     if label:
         bot.add_label(store, s.visit_id, label, "Adam")
     return s.visit_id
@@ -137,7 +138,8 @@ def test_dropdown_fits_discord():
 
 def test_summary(tmp_path):
     store = tmp_path / "fb.db"
-    ids = [_visit(store, "Northern Cardinal"), _visit(store, "House Finch"), _visit(store)]
+    ids = [_visit(store, "Northern Cardinal", 5), _visit(store, "House Finch", 15),
+           _visit(store, None, 25)]  # fmt: skip
     with closing(db.connect(store)) as conn:
         for i, visit_id in enumerate(ids):
             conn.execute(
@@ -302,3 +304,121 @@ def test_moving_the_camera_forgets_old_spots(tmp_path):
     assert before.process(_frames(1), now=dt.datetime(2026, 10, 23, 10, 0, 0)) is None
     after = Pipeline(store, tmp_path, FakeDetector([[NEAR_BRACKET]]), SaysClassifier("Not a bird"))
     assert after.process(_frames(1), now=dt.datetime(2026, 10, 23, 11, 0, 0)) is not None
+
+
+class Sure:
+    """A classifier that is sure of one label."""
+
+    version = "head-test.joblib"
+
+    def __init__(self, label="Tufted Titmouse", p=0.98):
+        self.label, self.p = label, p
+
+    def predict(self, crop):
+        return [(self.label, self.p), ("Skip", 0.01), ("House Finch", 0.01)]
+
+
+class Rolls:
+    """A stand-in for random.Random: 0.99 never picks a spot check, 0.0 always does."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def random(self):
+        return self.value
+
+
+BIRD = Detection(100, 100, 300, 200, 0.6)
+T0 = dt.datetime(2026, 10, 29, 9, 0, 0)
+
+
+def _pipe(tmp_path, classifier, n=1, roll=0.99, source="live"):
+    pipe = Pipeline(tmp_path / "fb.db", tmp_path, FakeDetector([[BIRD]] * n), classifier,
+                    source=source)  # fmt: skip
+    pipe.rng = Rolls(roll)
+    return pipe
+
+
+def test_a_repeat_of_the_same_guess_is_held_back(tmp_path):
+    pipe = _pipe(tmp_path, Sure(), n=4)
+    assert pipe.process(_frames(1), now=T0) is not None
+    later = T0 + dt.timedelta(minutes=4, seconds=59)
+    assert pipe.process(_frames(1), now=later) is None
+    assert (tmp_path / "rejects" / "2026-10-29" / "090459-repeat.jpg").exists()
+    # The window runs from the last post, not the last burst.
+    assert pipe.process(_frames(1), now=T0 + dt.timedelta(minutes=5)) is not None
+
+
+def test_a_different_guess_still_posts_during_a_run(tmp_path):
+    _pipe(tmp_path, Sure("Tufted Titmouse")).process(_frames(1), now=T0)
+    cardinal = _pipe(tmp_path, Sure("Northern Cardinal"))
+    assert cardinal.process(_frames(1), now=T0 + dt.timedelta(minutes=1)) is not None
+
+
+def test_a_sure_guess_is_auto_accepted_but_never_a_label(tmp_path):
+    store = tmp_path / "fb.db"
+    sighting = _pipe(tmp_path, Sure(p=0.97)).process(_frames(1), now=T0)
+    assert sighting.auto_accepted
+    with closing(db.connect(store)) as conn:
+        assert conn.execute("SELECT spot_check FROM auto_accepts").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM labels").fetchone()[0] == 0
+
+    async def go():
+        embed, view = bot.render(bot.visit_state(store, sighting.visit_id))
+        assert embed.title.startswith("☑️ Tufted Titmouse") and "not trained on" in embed.description
+        assert [i.custom_id for i in view.children] == [f"fb:c:{sighting.visit_id}"]
+        bot.add_label(store, sighting.visit_id, "Carolina Wren", "Adam")  # Change, then a tap
+        embed, _ = bot.render(bot.visit_state(store, sighting.visit_id))
+        assert embed.title == "✅ Carolina Wren"
+
+    asyncio.run(go())
+
+
+def test_a_spot_check_asks_as_usual(tmp_path):
+    store = tmp_path / "fb.db"
+    sighting = _pipe(tmp_path, Sure(), roll=0.0).process(_frames(1), now=T0)
+    assert not sighting.auto_accepted
+    with closing(db.connect(store)) as conn:
+        assert conn.execute("SELECT spot_check FROM auto_accepts").fetchone()[0] == 1
+
+    async def go():
+        embed, view = bot.render(bot.visit_state(store, sighting.visit_id))
+        assert embed.title.startswith("Tufted Titmouse?") and len(view.children) > 1
+
+    asyncio.run(go())
+
+
+@pytest.mark.parametrize(
+    "classifier, source",
+    [(Sure(p=0.96), "live"), (Sure("Skip", 0.99), "live"),
+     (Sure("Not a bird", 0.99), "live"), (Sure(), "test")],
+)  # fmt: skip
+def test_what_is_never_auto_accepted(tmp_path, classifier, source):
+    sighting = _pipe(tmp_path, classifier, source=source).process(_frames(1), now=T0)
+    assert sighting is not None and not sighting.auto_accepted
+    with closing(db.connect(tmp_path / "fb.db")) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM auto_accepts").fetchone()[0] == 0
+
+
+def test_summary_and_report_count_auto_accepts_apart(tmp_path):
+    from fountain_buddy import report
+
+    store = tmp_path / "fb.db"
+    auto = _pipe(tmp_path, Sure()).process(_frames(1), now=T0)
+    check = _pipe(tmp_path, Sure("Northern Cardinal"), roll=0.0).process(_frames(1), now=T0)
+    changed = _pipe(tmp_path, Sure("House Finch")).process(_frames(1), now=T0)
+    bot.add_label(store, check.visit_id, "Northern Cardinal", "Adam")
+    bot.add_label(store, changed.visit_id, "Purple Finch", "Adam")
+    with closing(db.connect(store)) as conn:
+        for i, s in enumerate((auto, check, changed)):
+            conn.execute("INSERT INTO posts VALUES (?, ?, 1, ?)", (i, s.visit_id, T0.isoformat()))
+        conn.commit()
+
+    text = summary_text(store, T0.date())
+    assert "3 photos, 2 answered, 1 auto-accepted" in text and "unanswered" not in text
+    assert "Tufted Titmouse: 1" in text
+    assert "agreed with you on 1/1" in text  # the changed auto-accept doesn't count against
+    weekly = report.weekly_text(store, tmp_path / "models", T0.date())
+    assert "Auto-accepted: 2 (not asked), 1 changed by you" in weekly
+    assert "Spot checks: right on 1/1 (100%)" in weekly
+    assert "Birds: 1." in weekly

@@ -2,7 +2,9 @@
 what the learning loop did. Posted to Discord on Sundays; `fountain-buddy report` prints it.
 
 Every prediction was made before its answer existed, so agreement here is an honest
-out-of-sample score for the scene the camera sees now.
+out-of-sample score for the scene the camera sees now. Since 2026-10-29 it covers only the
+posts that asked: auto-accepted ones (the easiest half) aren't answers. The spot checks,
+a random tenth of them asked anyway, measure those.
 """
 
 from __future__ import annotations
@@ -17,22 +19,27 @@ from fountain_buddy import db, species
 
 
 def answered(store: Path, start: dt.date, end: dt.date) -> list[dict]:
-    """Answered live posts taken in [start, end): label, first guess, button labels."""
+    """Answered live posts taken in [start, end): label, first guess, button labels, and
+    whether it was a spot check. Auto-accepts someone changed are left out: only wrong
+    ones get changed, so they'd bias agreement (weekly_text counts them)."""
     with closing(db.connect(store)) as conn:
         rows = conn.execute(
-            "SELECT l.label, p.top_k FROM visits v "
+            "SELECT l.label, p.top_k, a.spot_check FROM visits v "
             "JOIN posts ON posts.visit_id = v.id "
             "JOIN current_labels l ON l.visit_id = v.id "
             "JOIN predictions p "
             "ON p.id = (SELECT MAX(id) FROM predictions WHERE visit_id = v.id) "
-            "WHERE v.source = 'live' AND v.taken_at >= ? AND v.taken_at < ?",
+            "LEFT JOIN auto_accepts a ON a.visit_id = v.id "
+            "WHERE v.source = 'live' AND v.taken_at >= ? AND v.taken_at < ? "
+            "AND (a.spot_check IS NULL OR a.spot_check = 1)",
             (start.isoformat(), end.isoformat()),
         ).fetchall()
     out = []
     for r in rows:
         ranked = [label for label, _ in json.loads(r["top_k"])]
         buttons = [label for label in ranked if label in species.SPECIES][:3]
-        out.append({"label": r["label"], "guess": ranked[0], "buttons": buttons})
+        out.append({"label": r["label"], "guess": ranked[0], "buttons": buttons,
+                    "spot_check": r["spot_check"] == 1})  # fmt: skip
     return out
 
 
@@ -59,6 +66,12 @@ def weekly_text(store: Path, models_dir: Path, last_day: dt.date) -> str | None:
             "SELECT accepted FROM trainings WHERE trained_at >= ? AND trained_at < ?",
             (start.isoformat(), end.isoformat()),
         ).fetchall()
+        auto, changed = conn.execute(
+            "SELECT COUNT(*), COUNT(l.id) FROM auto_accepts a JOIN visits v ON v.id = a.visit_id "
+            "LEFT JOIN current_labels l ON l.visit_id = v.id "
+            "WHERE a.spot_check = 0 AND v.taken_at >= ? AND v.taken_at < ?",
+            (start.isoformat(), end.isoformat()),
+        ).fetchone()
         tray_labels = conn.execute(
             "SELECT COUNT(*) FROM current_labels l JOIN visits v ON v.id = l.visit_id "
             "WHERE v.source = 'live'"
@@ -101,6 +114,13 @@ def weekly_text(store: Path, models_dir: Path, last_day: dt.date) -> str | None:
                     for (truth, guess), n in mixups.most_common(3)
                 )
             )
+    checks = [r for r in rows if r["spot_check"]]
+    if auto or checks:
+        line = f"Auto-accepted: {auto} (not asked), {changed} changed by you."
+        if checks:
+            right = sum(r["guess"] == r["label"] for r in checks)
+            line += f" Spot checks: right on {right}/{len(checks)} ({right / len(checks):.0%})."
+        lines.append(line)
     others = Counter(r["label"] for r in rows if r["label"] not in species.SPECIES)
     if others:
         lines.append(", ".join(f"{label}: {n}" for label, n in others.most_common()))

@@ -2,9 +2,10 @@
 host (adamwitwer.com/birds/). `fountain-buddy publish` runs it; the service runs it after
 each run of answers.
 
-Only visits Adam answered with a species (or Squirrel) are published, so every photo on
-the page is one a human has looked at. Skip, Not a bird and unanswered posts never are.
-Each guess shown was made before its answer existed, like the weekly report's.
+Only visits answered with a species (or Squirrel), or auto-accepted as one, are
+published. Auto-accepts were posted in Discord too, so Adam has seen them and can Change
+them. Skip, Not a bird, unanswered posts and unanswered spot checks never are. Each guess
+shown was made before its answer existed, like the weekly report's.
 
 Photos are the full frame, downsized: the bird is too close for the lens to focus, so a
 tight crop is blurry at any size, but the whole scene reads fine at web width. Thumbnails
@@ -62,6 +63,7 @@ class Photo:
     guess: str | None
     guess_p: float | None
     box: tuple[int, int, int, int] | None = None  # the best crop's, in frame pixels
+    auto: bool = False  # the label is the AI's own, auto-accepted, not an answer
 
     @property
     def agreed(self) -> bool:
@@ -96,12 +98,15 @@ class Visitor:
 
 
 def load_photos(store: Path) -> list[Photo]:
-    """Answered live tray photos whose current label is a visitor, oldest first."""
+    """Live tray photos whose answer (or auto-accepted guess) is a visitor, oldest first."""
     with closing(db.connect(store)) as conn:
         rows = conn.execute(
-            "SELECT v.id, v.taken_at, v.image_path, l.label, c.det_conf, "
+            "SELECT v.id, v.taken_at, v.image_path, "
+            "COALESCE(l.label, CASE WHEN a.spot_check = 0 THEN p.label END) AS label, "
+            "l.id IS NULL AS auto, c.det_conf, "
             "c.x1, c.y1, c.x2, c.y2, p.label AS guess, p.confidence AS guess_p "
-            "FROM visits v JOIN current_labels l ON l.visit_id = v.id "
+            "FROM visits v LEFT JOIN current_labels l ON l.visit_id = v.id "
+            "LEFT JOIN auto_accepts a ON a.visit_id = v.id "
             "LEFT JOIN crops c ON c.id = (SELECT id FROM crops WHERE visit_id = v.id "
             "ORDER BY det_conf DESC LIMIT 1) "
             "LEFT JOIN predictions p "
@@ -112,7 +117,8 @@ def load_photos(store: Path) -> list[Photo]:
     return [
         Photo(r["id"], dt.datetime.fromisoformat(r["taken_at"]), r["label"], r["image_path"],
               r["det_conf"] or 0.0, r["guess"], r["guess_p"],
-              (r["x1"], r["y1"], r["x2"], r["y2"]) if r["x1"] is not None else None)
+              (r["x1"], r["y1"], r["x2"], r["y2"]) if r["x1"] is not None else None,
+              bool(r["auto"]))
         for r in rows
         if r["label"] in VISITORS
     ]  # fmt: skip
@@ -209,6 +215,8 @@ def _guess_text(label: str | None) -> str:
 def _verdict(visit: Visit) -> tuple[str, str]:
     """(css class, short text) for a visit's chip, from its best photo's guess."""
     best = visit.best
+    if best.auto:
+        return "agree", f"AI's call ({best.guess_p:.0%})"
     if best.agreed:
         return "agree", f"AI agreed ({best.guess_p:.0%})" if best.guess_p else "AI agreed"
     return "miss", f"AI guessed {_guess_text(best.guess)}"
@@ -216,14 +224,19 @@ def _verdict(visit: Visit) -> tuple[str, str]:
 
 def _verdict_long(visit: Visit) -> str:
     best = visit.best
-    if best.agreed:
+    if best.auto:
+        line = f"The AI was {best.guess_p:.0%} sure, so I let it make this call."
+    elif best.agreed:
         line = f"The AI guessed {_e(best.label)} too"
         line += f" ({best.guess_p:.0%} sure)." if best.guess_p else "."
     else:
         line = f"The AI guessed {_e(_guess_text(best.guess))}. I said {_e(best.label)}."
-    if len(visit.photos) > 1:
-        right = sum(p.agreed for p in visit.photos)
+    checked = [p for p in visit.photos if not p.auto]
+    right = sum(p.agreed for p in checked)
+    if len(checked) == len(visit.photos) > 1:
         line += f" Across the visit it got {right} of {len(visit.photos)} photos right."
+    elif checked:
+        line += f" Of the {len(checked)} photos I checked, it got {right} right."
     return line
 
 
@@ -277,8 +290,9 @@ def render(visits: list[Visit], everyone: list[Visitor], img_dir: Path, now: dt.
         "<h1>Who’s at the tray</h1>",
         '<p class="intro">A camera watches a tray feeder full of safflower seed. An AI '
         "guesses who dropped by, I tell it when it’s wrong, and it learns from every "
-        "answer. I’ve checked every photo here. The camera is still finding its best "
-        "angle, so forgive the soft focus.</p>",
+        "answer. When it’s at least 97% sure it makes the call itself, and I still "
+        "look at every photo and fix the ones it gets wrong. The camera is still finding "
+        "its best angle, so forgive the soft focus.</p>",
         f'<p class="updated">Updated {_e(_when(now))}.</p>',
         "</header>",
     ]

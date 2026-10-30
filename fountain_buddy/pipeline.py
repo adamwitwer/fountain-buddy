@@ -15,6 +15,17 @@ Night: the camera switches to infrared after dark, and its frames are pure greys
 No birds visit then, but mice do (94 posts in one night, 2026-10-19). An infrared burst
 posts only if the classifier's first guess is a species or Squirrel; the camera stays in
 infrared past sunrise, and a wren came at 07:35 that way.
+
+Repeats: a bird at the tray trips motion every few seconds, and one titmouse made 22
+posts in an hour. A burst whose first guess was posted in the last REPEAT_WINDOW isn't
+posted again. A different guess still posts, since several species share the tray: a
+flat 5-minute cooldown would have hidden 283 posts whose answer differed from the one
+before (2026-10-23 to 29), this hides none that weren't mis-guessed.
+
+Auto-accept: a guess of a species or Squirrel at AUTO_ACCEPT or above is posted as
+accepted, with only a Change button. At 0.97 that was half the posts, and 6 of 600
+answered ones were wrong (5 should have been Skip, 1 the wrong species). It is not a
+label (see db.auto_accepts). SPOT_CHECK_SHARE of them ask anyway, to keep measuring.
 """
 
 from __future__ import annotations
@@ -22,6 +33,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import random
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +53,9 @@ SPOT_IOU = 0.5  # the bracket repeats at ~0.95, the ivy sprig at 0.5-0.9
 SPOT_DAYS = 30
 POSTABLE = {*species.SPECIES, species.SQUIRREL}
 INFRARED_SATURATION = 2  # mean HSV saturation: infrared frames are 0, daylight 38-70
+REPEAT_WINDOW = dt.timedelta(minutes=5)
+AUTO_ACCEPT = 0.97
+SPOT_CHECK_SHARE = 0.1
 
 
 @dataclass(frozen=True)
@@ -50,6 +65,7 @@ class Sighting:
     ranked: list[tuple[str, float]]  # every label, most likely first
     det_conf: float
     preview_path: Path
+    auto_accepted: bool = False
 
 
 def not_bird_spots(store: Path, camera: str, now: dt.datetime) -> list[tuple[int, ...]]:
@@ -69,6 +85,19 @@ def not_bird_spots(store: Path, camera: str, now: dt.datetime) -> list[tuple[int
             (camera, species.NOT_A_BIRD, since),
         ).fetchall()
     return [tuple(r) for r in rows]
+
+
+def recently_posted(store: Path, camera: str, source: str, guess: str, now: dt.datetime) -> bool:
+    """True if a visit with this first guess was recorded in the last REPEAT_WINDOW."""
+    since = (now - REPEAT_WINDOW).isoformat(timespec="seconds")
+    with closing(db.connect(store)) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM visits v JOIN predictions p ON p.visit_id = v.id "
+            "WHERE v.camera = ? AND v.source = ? AND p.label = ? "
+            "AND v.taken_at > ? AND v.taken_at <= ? LIMIT 1",
+            (camera, source, guess, since, now.isoformat(timespec="seconds")),
+        ).fetchone()
+    return row is not None
 
 
 def best_detection(frames: list[np.ndarray], detector: Detector, spots=()):
@@ -105,6 +134,7 @@ class Pipeline:
         self.store, self.data_dir = store, data_dir
         self.detector, self.classifier, self.camera = detector, classifier, camera
         self.source = source  # 'test' for post-test: never trained on, never summarized
+        self.rng = random.Random()  # picks the spot checks
         db.init(store)
 
     def _save(self, rel: str, image: np.ndarray, quality: int = 92) -> None:
@@ -136,6 +166,13 @@ class Pipeline:
                          "known not-a-bird spot" if on_spot else "infrared",
                          ranked[0][0], 100 * ranked[0][1], det.conf)  # fmt: skip
                 return None
+        guess, p = ranked[0]
+        if recently_posted(self.store, self.camera, self.source, guess, now):
+            self._save(f"rejects/{stamp}-repeat.jpg", preview(frame, det), quality=85)
+            log.info("burst: repeat of %s (%.0f%%, bird %.2f)", guess, 100 * p, det.conf)
+            return None
+        auto = self.source == "live" and guess in POSTABLE and p >= AUTO_ACCEPT
+        spot_check = auto and self.rng.random() < SPOT_CHECK_SHARE
 
         frame_rel = f"images/{self.camera}/{stamp}.jpg"
         self._save(frame_rel, frame, quality=95)
@@ -158,13 +195,18 @@ class Pipeline:
                  json.dumps([[label, round(p, 4)] for label, p in ranked[:5]]),
                  now.isoformat(timespec="seconds")),
             )  # fmt: skip
+            if auto:
+                conn.execute(
+                    "INSERT INTO auto_accepts (visit_id, spot_check, decided_at) VALUES (?, ?, ?)",
+                    (visit_id, int(spot_check), now.isoformat(timespec="seconds")),
+                )
             conn.commit()
         preview_rel = f"previews/{visit_id}.jpg"
         self._save(preview_rel, preview(frame, det), quality=88)
-        log.info(
-            "visit %d: %s %.0f%% (bird %.2f)", visit_id, ranked[0][0], 100 * ranked[0][1], det.conf
-        )
-        return Sighting(visit_id, now, ranked, det.conf, self.data_dir / preview_rel)
+        mode = " (spot check)" if spot_check else " (auto-accepted)" if auto else ""
+        log.info("visit %d: %s %.0f%% (bird %.2f)%s", visit_id, guess, 100 * p, det.conf, mode)
+        return Sighting(visit_id, now, ranked, det.conf, self.data_dir / preview_rel,
+                        auto and not spot_check)  # fmt: skip
 
     def prune_rejects(self, today: dt.date | None = None) -> None:
         cutoff = (today or dt.date.today()) - dt.timedelta(days=REJECTS_KEPT_DAYS)
