@@ -73,7 +73,9 @@ ships, PLAN.md is the source of truth for scope; update it when a decision chang
     trains, never makes a known spot, and isn't in agreement scores. It is published.
   - 1 in 10 of those (random) is a spot check, posted with the usual choices. The weekly
     report shows spot-check accuracy and how many auto-accepts were changed. If spot
-    checks fall clearly below ~97%, raise the threshold.
+    checks fall clearly below ~97%, raise the threshold. Spot checks say so (🔍) since
+    2026-10-31: unmarked, a 98% post asking for a tap looked like a bug. Discord rounds
+    percentages down, so "97%" only shows on an auto-accept (96.5-96.99% showed as 97%).
   - The weekly agreement now covers only posts that asked, so it drops relative to weeks
     before 10-29 (it lost its easiest half). Not a regression.
 - **A new camera is coming** (Adam, 2026-10-29), for sharper images. When it's in:

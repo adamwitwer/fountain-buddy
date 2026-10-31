@@ -14,6 +14,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import math
 import re
 from contextlib import closing
 from pathlib import Path
@@ -40,7 +41,8 @@ COLOR_AUTO = 0x1ABC9C
 def visit_state(store: Path, visit_id: int) -> dict:
     with closing(db.connect(store)) as conn:
         visit = conn.execute(
-            "SELECT v.taken_at, v.camera, v.source, p.top_k, a.spot_check FROM visits v "
+            "SELECT v.taken_at, v.camera, v.source, p.top_k, p.confidence, a.spot_check "
+            "FROM visits v "
             "JOIN predictions p ON p.id = (SELECT MAX(id) FROM predictions WHERE visit_id = v.id) "
             "LEFT JOIN auto_accepts a ON a.visit_id = v.id "
             "WHERE v.id = ?",
@@ -56,7 +58,9 @@ def visit_state(store: Path, visit_id: int) -> dict:
         "ranked": [tuple(x) for x in json.loads(visit["top_k"])],
         "label": label["label"] if label else None,
         "labeled_by": label["labeled_by"] if label else None,
+        "confidence": visit["confidence"],  # unrounded, as the pipeline judged it
         "auto": visit["spot_check"] == 0,
+        "spot_check": visit["spot_check"] == 1,
     }
 
 
@@ -88,13 +92,19 @@ def _when(state: dict) -> str:
     return f"{test}Tray Feeder · {state['taken_at']:%a %-I:%M:%S %p}"
 
 
+def _pct(p: float) -> str:
+    """Rounded down, so "97%" only ever shows on a guess that reached AUTO_ACCEPT."""
+    return f"{math.floor(p * 100 + 1e-9)}%"
+
+
 def render(state: dict) -> tuple[discord.Embed, discord.ui.View]:
     visit_id, ranked = state["visit_id"], state["ranked"]
     guess, p = ranked[0]
+    p = state.get("confidence") or p
     image = f"attachment://visit-{visit_id}.jpg"
     if state["label"] is None and state.get("auto"):
         embed = discord.Embed(
-            title=f"☑️ {guess}  ({p:.0%})",
+            title=f"☑️ {guess}  ({_pct(p)})",
             description=f"{_when(state)}\nAuto-accepted, not trained on · Change if it's wrong",
             color=COLOR_AUTO,
         )
@@ -103,9 +113,14 @@ def render(state: dict) -> tuple[discord.Embed, discord.ui.View]:
         view.add_item(ChangeButton(visit_id))
         return embed, view
     if state["label"] is None:
-        title = f"{guess}?  ({p:.0%})" if guess in species.SPECIES else "Unclear photo. What is it?"
-        others = ", ".join(f"{label} {q:.0%}" for label, q in ranked[1:4] if q >= 0.02)
-        embed = discord.Embed(title=title, description=_when(state), color=COLOR_OPEN)
+        title = (
+            f"{guess}?  ({_pct(p)})" if guess in species.SPECIES else "Unclear photo. What is it?"
+        )
+        others = ", ".join(f"{label} {_pct(q)}" for label, q in ranked[1:4] if q >= 0.02)
+        description = _when(state)
+        if state.get("spot_check"):
+            description += "\n🔍 Spot check: the model is sure, is it right?"
+        embed = discord.Embed(title=title, description=description, color=COLOR_OPEN)
         if others:
             embed.add_field(name="Also possible", value=others, inline=False)
         embed.set_image(url=image)
@@ -113,7 +128,7 @@ def render(state: dict) -> tuple[discord.Embed, discord.ui.View]:
 
     label = state["label"]
     right = label == guess
-    verdict = "guessed right" if right else f"guessed {guess} ({p:.0%})"
+    verdict = "guessed right" if right else f"guessed {guess} ({_pct(p)})"
     embed = discord.Embed(
         title=f"✅ {label}" if label != species.SKIP else "🗑️ Skipped",
         description=f"{_when(state)}\nLabeled by {state['labeled_by']} · model {verdict}",
@@ -199,7 +214,7 @@ class ChangeButton(discord.ui.DynamicItem[discord.ui.Button], template=r"fb:c:(?
         bot: FeederBot = interaction.client
         state = visit_state(bot.store, self.visit_id)
         state["label"] = None  # show the choices again; the old label stands until replaced
-        state["auto"] = False
+        state["auto"] = state["spot_check"] = False
         embed, view = render(state)
         await interaction.response.edit_message(embed=embed, view=view)
 

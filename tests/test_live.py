@@ -384,6 +384,7 @@ def test_a_spot_check_asks_as_usual(tmp_path):
     async def go():
         embed, view = bot.render(bot.visit_state(store, sighting.visit_id))
         assert embed.title.startswith("Tufted Titmouse?") and len(view.children) > 1
+        assert "🔍 Spot check" in embed.description
 
     asyncio.run(go())
 
@@ -422,3 +423,17 @@ def test_summary_and_report_count_auto_accepts_apart(tmp_path):
     assert "Auto-accepted: 2 (not asked), 1 changed by you" in weekly
     assert "Spot checks: right on 1/1 (100%)" in weekly
     assert "Birds: 1." in weekly
+
+
+def test_percentages_round_down_so_97_means_auto_accepted(tmp_path):
+    store = tmp_path / "fb.db"
+    sighting = _pipe(tmp_path, Sure(p=0.96996)).process(_frames(1), now=T0)
+    assert not sighting.auto_accepted  # top_k stores 0.97; the threshold saw 0.96996
+
+    async def go():
+        embed, _ = bot.render(bot.visit_state(store, sighting.visit_id))
+        assert embed.title == "Tufted Titmouse?  (96%)"
+        assert "Spot check" not in embed.description
+
+    asyncio.run(go())
+    assert bot._pct(0.97) == "97%" and bot._pct(0.9999) == "99%" and bot._pct(0.05) == "5%"
