@@ -309,6 +309,13 @@ Learned from v1 and the 2026-10-18 probe:
   looked clearly sharper than that morning's birds. A dead leaf caught in the top of
   the holly scored as a bird twice in the first 15 minutes; answering it "Not a bird"
   makes it a known spot.
+- **Peanut feeder back in frame** (2026-11-01 afternoon), hung in front of the holly so
+  foliage, not the patio, is behind it. **The camera was re-aimed 16:38:40-16:39:53**, on purpose, to fit both feeders,
+  while it was lowered (recorded at 16:39:50, after the hands-and-phone frames): tilted
+  up and rolled ~15 degrees again, the house and patio top left, the peanut feeder left
+  of center (~5-40% down), the tray lower middle. Both feeders fit one box of roughly
+  x 22-62%, y 15-85% that leaves the patio out: the planned detector/publish region,
+  once a few days of detections confirm it.
 - Frames carry burned-in overlays: date/time top center, a Reolink watermark top left,
   "Tray Feeder" bottom right. The view is fisheye-ish.
 
