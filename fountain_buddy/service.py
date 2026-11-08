@@ -22,7 +22,7 @@ from fountain_buddy.camera import Camera
 from fountain_buddy.classifier import Classifier
 from fountain_buddy.config import Settings, settings
 from fountain_buddy.detect import Detector
-from fountain_buddy.pipeline import Pipeline
+from fountain_buddy.pipeline import Pipeline, Region
 
 log = logging.getLogger("fountain_buddy")
 
@@ -93,14 +93,23 @@ def summary_text(store, day: dt.date) -> str | None:
     return "\n".join(lines)
 
 
+def write_detector_config(cfg: Settings, config: dict) -> None:
+    pointer = cfg.models_dir / "detector.json"
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.write_text(json.dumps(config, indent=2) + "\n")
+
+
 def load_pipeline(cfg: Settings, **kwargs) -> Pipeline:
     det = detector_config(cfg)
     detector = Detector(cfg.models_dir, det["weights"], det["imgsz"], det["conf"])
     classifier = Classifier(cfg.models_dir)
     classifier.version  # noqa: B018 - loads the head now, not on the first bird
-    log.info("models: detector %s (conf %.2f), classifier %s",
-             detector.name, det["conf"], classifier.version)  # fmt: skip
-    return Pipeline(cfg.db_path, cfg.data_dir, detector, classifier, **kwargs)
+    if kwargs.get("camera", "tray") == "tray":  # a test image has no view to crop to
+        kwargs.setdefault("region", Region.from_config(det))
+    pipeline = Pipeline(cfg.db_path, cfg.data_dir, detector, classifier, **kwargs)
+    log.info("models: detector %s (conf %.2f, %s), classifier %s",
+             detector.name, det["conf"], pipeline.region_text(), classifier.version)  # fmt: skip
+    return pipeline
 
 
 def _ago(seconds: float) -> str:
@@ -182,7 +191,8 @@ class Service:
     def status(self) -> str:
         return status_text(
             self.cfg, self.started, self.camera.last_ok,
-            self.pipeline.detector.name if self.pipeline else "loading",
+            f"{self.pipeline.detector.name} ({self.pipeline.region_text()})"
+            if self.pipeline else "loading",
             self.pipeline.classifier.version if self.pipeline else "loading",
         )  # fmt: skip
 

@@ -198,6 +198,43 @@ def camera_moved(at: str | None, note: str | None) -> int:
         conn.commit()
     print(f"recorded: tray camera moved at {when:%Y-%m-%d %H:%M:%S}; known not-a-bird "
           "spots from before it no longer count")  # fmt: skip
+    from fountain_buddy.pipeline import Region
+    from fountain_buddy.service import detector_config
+
+    region = Region.from_config(detector_config(cfg))
+    if region and region.set_at < when.isoformat(timespec="seconds"):
+        print(f"the detector crop ({region.text()}) was set for the old view, so it uses "
+              "the whole frame until `fountain-buddy crop` sets a new one")  # fmt: skip
+    return 0
+
+
+RESTART = "launchctl kickstart -k gui/$(id -u)/com.fountainbuddy.run"
+
+
+def crop(box: list[float] | None) -> int:
+    """Set (percent of the frame) or clear the detector region in detector.json."""
+    import datetime as dt
+
+    from fountain_buddy.pipeline import Region
+    from fountain_buddy.service import detector_config, write_detector_config
+
+    cfg = settings()
+    config = dict(detector_config(cfg))
+    if box is None:
+        config.pop("region", None)
+        message = "detector crop off: it looks at the whole frame"
+    else:
+        entry = {"box": [round(v / 100, 4) for v in box],
+                 "set_at": dt.datetime.now().isoformat(timespec="seconds")}  # fmt: skip
+        try:
+            region = Region.from_config({"region": entry})
+        except ValueError as exc:
+            print(f"crop: {exc} (give x1 y1 x2 y2 in percent, x1 < x2, y1 < y2)")
+            return 2
+        config["region"] = entry
+        message = f"detector crop set: {region.text()} of the frame"
+    write_detector_config(cfg, config)
+    print(f"{message}. Restart the service to use it: {RESTART}")
     return 0
 
 
@@ -241,6 +278,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--at", help="when, as YYYY-MM-DDTHH:MM (default: now)")
     p.add_argument("--note", help="what changed, for the record")
+    p = sub.add_parser("crop", help="look for birds only in part of the frame (until a move)")
+    p.add_argument("box", nargs="*", type=float, metavar="PCT",
+                   help="x1 y1 x2 y2 in percent of the frame, e.g. 25 15 60 70")  # fmt: skip
+    p.add_argument("--off", action="store_true", help="use the whole frame again")
     p = sub.add_parser("post-test", help="post one image to Discord as a TEST sighting")
     p.add_argument("image", help="a frame (v1 overlays are painted out first)")
     p = sub.add_parser("bakeoff", help="compare classifier backbones on the labeled crops")
@@ -266,6 +307,10 @@ def main(argv: list[str] | None = None) -> int:
         return publish(not args.no_upload)
     if args.command == "camera-moved":
         return camera_moved(args.at, args.note)
+    if args.command == "crop":
+        if args.off == bool(args.box) or (args.box and len(args.box) != 4):
+            parser.error("crop takes x1 y1 x2 y2, or --off")
+        return crop(None if args.off else args.box)
     if args.command == "post-test":
         return post_test(args.image)
     if args.command == "bakeoff":

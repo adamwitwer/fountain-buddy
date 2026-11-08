@@ -93,6 +93,7 @@ uv run fountain-buddy train-head [--force]  # gated retrain (the service does th
 uv run fountain-buddy report     # the weekly agreement report, last 7 days
 uv run fountain-buddy post-test IMAGE   # post a TEST sighting (source='test', never trained)
 uv run fountain-buddy camera-moved [--at ISO] [--note TEXT]  # after a move: reset known spots
+uv run fountain-buddy crop X1 Y1 X2 Y2 | --off   # detector looks only there (percent); restart after
 uv run fountain-buddy publish [--no-upload]   # build the public page; upload if configured
 uv run fountain-buddy import-legacy     # v1 import (idempotent; already done)
 uv run fountain-buddy bakeoff [--detectors]   # Phase 3 comparisons -> data/reports/
@@ -197,8 +198,11 @@ just before the retrain, and once at startup. Started 2026-10-22.
   crashed both `post-test` and `run` on the first try.
 - **Model pointers, not hard-coded paths.** `data/models/head.json` names the current
   classifier head (hot-reloaded). `data/models/detector.json` names the detector weights,
-  imgsz and conf (read at startup; default yolo26m@1280, conf 0.1). Ultralytics weights
-  live in `data/models/`, never the repo root.
+  imgsz and conf (read at startup; default yolo26m@1280, conf 0.1), and optionally a
+  `region` (`{"box": [x1, y1, x2, y2] as fractions, "set_at": ISO}`, written by
+  `fountain-buddy crop`). The detector then looks only inside the box. Crops and boxes
+  stay in full-frame pixels. A camera move recorded after `set_at` switches it off.
+  Ultralytics weights live in `data/models/`, never the repo root.
 - **Write plain Python ints to SQLite.** numpy integers are stored as 8-byte BLOBs and
   silently break comparisons (it happened to the crop coordinates on 2026-10-18).
 - **Never trust a single motion source.** Push events can drop, so `camera.watch` also
@@ -324,7 +328,11 @@ Learned from v1 and the 2026-10-18 probe:
   left of it against the holly (~26-33% across, 24-59% down). Plain fence boards behind
   the tray. The house's door and a covered grill are at the far left. Both feeders fit
   in about a third of the frame's width, so a detector crop would nearly restore full
-  resolution.
+  resolution. **Detector crop** built and deployed 2026-11-07 with no box set (`crop`,
+  see Conventions). Next: after 2-3 days of birds at both feeders, draw the box from
+  their detections plus a margin. Replay that period's frames with and without it, and
+  set it only if it misses nothing the whole frame found. Then use the same box for the
+  public page's big photos.
 - Frames carry burned-in overlays: date/time top center, a Reolink watermark top left,
   "Tray Feeder" bottom right. The view is fisheye-ish.
 
@@ -353,6 +361,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-11-07 | Crop the detector to the feeders. YOLO sees the 4K frame at a third of its size, and the patio, house and grill can only cause false alarms. The face-the-fence view puts both feeders in about a third of the width, so a crop gives birds ~2.5-3x the pixels. Built switched off, as a `region` in detector.json tied to the view (a later camera move turns it off), so a box from an old view can't hide birds. Box to come from real detections and a replay, not a guess (Adam agreed). | open |
 | 2026-10-29 | Adam: too many repetitive or obviously right posts; raise the cooldown and auto-approve above ~96%. Agreed, with changes: hold back a repeat of the *same guess* within 5 min rather than every post (several species share the tray), and auto-accept at 0.97 without making it a label. Training on its own guesses would teach the model its mistakes, and the head learns little from crops it already gets right. Spot-check 1 in 10 so accuracy at the top stays measured as retrains shift calibration. Adam chose 5 min, 0.97, publish auto-accepts, spot checks. | done |
 | 2026-10-22 | Public page at adamwitwer.com/birds/, built here and pushed over SSH (like Watchlog from the Pi). Publish only human-answered species so nothing unchecked goes public; group bursts into visits (one titmouse made 22 posts in an hour); show the full frame, since crops are out of focus; show the AI's guess beside the answer, since the misses are the fun part. Keep 10 days plus each visitor's best (Adam). Later: let Adam pick a visitor's best photo in Discord; detector confidence sometimes picks a well-camouflaged dove. | done |
 | 2026-10-22 | The 0.5-point gate margin rejected ordinary refit wobble: one Tufted Titmouse answer flipped 11 of 723 gate crops, nearly all coin-flips into or out of Skip. Replaced with a paired sign test (p < 0.01) plus a 2-point backstop. The gate exists to catch floods of bad answers or a bug, which flip many crops one way; a single mis-tap is below the noise and is fixed with Change. The Discord alert now says the answers are kept rather than hinting at a mis-tap. | done |

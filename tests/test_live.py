@@ -10,7 +10,7 @@ import pytest
 from fountain_buddy import bot, db, species
 from fountain_buddy.classifier import blend_zero_shot
 from fountain_buddy.detect import Detection
-from fountain_buddy.pipeline import Pipeline
+from fountain_buddy.pipeline import Pipeline, Region
 from fountain_buddy.service import summary_text
 
 RANKED = [
@@ -437,3 +437,84 @@ def test_percentages_round_down_so_97_means_auto_accepted(tmp_path):
 
     asyncio.run(go())
     assert bot._pct(0.97) == "97%" and bot._pct(0.9999) == "99%" and bot._pct(0.05) == "5%"
+
+
+class SeesShapes:
+    """A detector that finds one bird at a fixed spot in whatever it's shown."""
+
+    name = "fake@1280"
+
+    def __init__(self):
+        self.shapes = []
+
+    def birds(self, frame):
+        self.shapes.append(frame.shape[:2])
+        return [Detection(10, 20, 110, 70, 0.8)]
+
+
+REGION = Region((0.25, 0.5, 0.75, 1.0), "2026-11-07T14:00:00")
+
+
+def test_the_detector_sees_only_the_region_and_boxes_stay_in_frame_pixels(tmp_path):
+    store, det = tmp_path / "fb.db", SeesShapes()
+    pipe = Pipeline(store, tmp_path, det, Sure(), region=REGION)
+    pipe.rng = Rolls(0.99)
+    sighting = pipe.process(_frames(1), now=dt.datetime(2026, 11, 7, 15, 0, 0))
+    assert det.shapes == [(360, 640)]
+    with closing(db.connect(store)) as conn:
+        crop = conn.execute("SELECT x1, y1, x2, y2 FROM crops").fetchone()
+    assert tuple(crop) == (330, 380, 430, 430)
+    assert sighting is not None and pipe.region_text() == "cropped to x 25-75%, y 50-100%"
+
+
+def test_a_camera_move_after_the_region_was_set_switches_it_off(tmp_path):
+    store = tmp_path / "fb.db"
+    db.init(store)
+    with closing(db.connect(store)) as conn:
+        conn.execute("INSERT INTO camera_moves (camera, moved_at) VALUES ('tray', ?)",
+                     ("2026-11-07T13:39:30",))  # fmt: skip
+        conn.commit()
+    det = SeesShapes()
+    pipe = Pipeline(store, tmp_path, det, Sure(), region=REGION)
+    pipe.process(_frames(1), now=dt.datetime(2026, 11, 7, 15, 0, 0))
+    assert det.shapes == [(360, 640)]  # the move came before the region: it applies
+    with closing(db.connect(store)) as conn:
+        conn.execute("INSERT INTO camera_moves (camera, moved_at) VALUES ('tray', ?)",
+                     ("2026-11-08T09:00:00",))  # fmt: skip
+        conn.commit()
+    pipe.process(_frames(1), now=dt.datetime(2026, 11, 8, 10, 0, 0))
+    assert det.shapes[-1] == (720, 1280)
+    assert "from before the camera moved" in pipe.region_text(dt.datetime(2026, 11, 8, 10, 0, 0))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [{"box": [0.5, 0.1, 0.4, 0.9], "set_at": "2026-11-07T14:00:00"},
+     {"box": [0.1, 0.1, 1.2, 0.9], "set_at": "2026-11-07T14:00:00"},
+     {"box": [0.1, 0.1, 0.9, 0.9]}],
+)  # fmt: skip
+def test_a_malformed_region_is_refused(entry):
+    with pytest.raises((ValueError, KeyError)):
+        Region.from_config({"region": entry})
+    assert Region.from_config({}) is None
+
+
+def test_crop_command_writes_and_clears_the_region(tmp_path, monkeypatch, capsys):
+    import json
+
+    from fountain_buddy import __main__ as cli
+    from fountain_buddy.config import Settings
+
+    cfg = Settings(camera_host="192.0.2.1", camera_username="u", data_dir=tmp_path)
+    monkeypatch.setattr(cli, "settings", lambda: cfg)
+    assert cli.main(["crop", "25", "15", "60", "70"]) == 0
+    config = json.loads((cfg.models_dir / "detector.json").read_text())
+    assert config["weights"] == "yolo26m.pt" and config["region"]["box"] == [0.25, 0.15, 0.6, 0.7]
+    assert Region.from_config(config).text() == "x 25-60%, y 15-70%"
+    assert "Restart the service" in capsys.readouterr().out
+
+    assert cli.main(["camera-moved", "--at", "2099-01-01T00:00"]) == 0
+    assert "set for the old view" in capsys.readouterr().out
+    assert cli.main(["crop", "--off"]) == 0
+    assert "region" not in json.loads((cfg.models_dir / "detector.json").read_text())
+    assert cli.main(["crop", "60", "15", "25", "70"]) == 2

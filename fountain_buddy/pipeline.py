@@ -26,6 +26,12 @@ Auto-accept: a guess of a species or Squirrel at AUTO_ACCEPT or above is posted 
 accepted, with only a Change button. At 0.97 that was half the posts, and 6 of 600
 answered ones were wrong (5 should have been Skip, 1 the wrong species). It is not a
 label (see db.auto_accepts). SPOT_CHECK_SHARE of them ask anyway, to keep measuring.
+
+Detector region: YOLO sees the 4K frame shrunk to 1280 px, a third of its size. With a
+region set (`fountain-buddy crop`, saved in detector.json), it looks only at that part
+of the frame, so birds there look bigger to it and nothing outside can fire. Crops, saved
+frames and boxes stay in full-frame pixels. A region belongs to one view: once the camera
+is recorded as moved after it was set, it stops applying until a new one is set.
 """
 
 from __future__ import annotations
@@ -59,6 +65,34 @@ SPOT_CHECK_SHARE = 0.1
 
 
 @dataclass(frozen=True)
+class Region:
+    box: tuple[float, float, float, float]  # x1, y1, x2, y2 as fractions of the frame
+    set_at: str  # local ISO time; a camera move after it switches the region off
+
+    @classmethod
+    def from_config(cls, config: dict) -> Region | None:
+        """The region in detector.json's "region" entry, or None. Raises ValueError if
+        it is malformed, rather than guessing."""
+        entry = config.get("region")
+        if not entry:
+            return None
+        x1, y1, x2, y2 = (float(v) for v in entry["box"])
+        if not (0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1):
+            raise ValueError(f"detector region out of range: {entry['box']}")
+        dt.datetime.fromisoformat(entry["set_at"])
+        return cls((x1, y1, x2, y2), entry["set_at"])
+
+    def pixels(self, shape) -> tuple[int, int, int, int]:
+        h, w = shape[:2]
+        x1, y1, x2, y2 = self.box
+        return round(x1 * w), round(y1 * h), round(x2 * w), round(y2 * h)
+
+    def text(self) -> str:
+        x1, y1, x2, y2 = (round(100 * v) for v in self.box)
+        return f"x {x1}-{x2}%, y {y1}-{y2}%"
+
+
+@dataclass(frozen=True)
 class Sighting:
     visit_id: int
     taken_at: dt.datetime
@@ -68,16 +102,21 @@ class Sighting:
     auto_accepted: bool = False
 
 
+def last_move(store: Path, camera: str, now: dt.datetime) -> str | None:
+    """When this camera was last recorded as moved, up to now (ISO), or None."""
+    with closing(db.connect(store)) as conn:
+        return conn.execute(
+            "SELECT MAX(moved_at) FROM camera_moves WHERE camera = ? AND moved_at <= ?",
+            (camera, now.isoformat(timespec="seconds")),
+        ).fetchone()[0]
+
+
 def not_bird_spots(store: Path, camera: str, now: dt.datetime) -> list[tuple[int, ...]]:
     """Boxes of this camera's visits answered "Not a bird" in the last SPOT_DAYS, since
     it was last moved."""
     since = (now - dt.timedelta(days=SPOT_DAYS)).isoformat(timespec="seconds")
+    since = max(since, last_move(store, camera, now) or "")
     with closing(db.connect(store)) as conn:
-        moved = conn.execute(
-            "SELECT MAX(moved_at) FROM camera_moves WHERE camera = ? AND moved_at <= ?",
-            (camera, now.isoformat(timespec="seconds")),
-        ).fetchone()[0]
-        since = max(since, moved or "")
         rows = conn.execute(
             "SELECT c.x1, c.y1, c.x2, c.y2 FROM crops c JOIN visits v ON v.id = c.visit_id "
             "JOIN current_labels l ON l.visit_id = v.id "
@@ -100,12 +139,21 @@ def recently_posted(store: Path, camera: str, source: str, guess: str, now: dt.d
     return row is not None
 
 
-def best_detection(frames: list[np.ndarray], detector: Detector, spots=()):
+def detect(frame: np.ndarray, detector: Detector, region: Region | None = None) -> list[Detection]:
+    """Birds in the frame (or only in the region), in full-frame pixels."""
+    if region is None:
+        return detector.birds(frame)
+    x1, y1, x2, y2 = region.pixels(frame.shape)
+    return [Detection(d.x1 + x1, d.y1 + y1, d.x2 + x1, d.y2 + y1, d.conf)
+            for d in detector.birds(frame[y1:y2, x1:x2])]  # fmt: skip
+
+
+def best_detection(frames: list[np.ndarray], detector: Detector, spots=(), region=None):
     """(frame index, detection, on a known spot) for the best bird in the burst, or None.
     Anything off the known not-a-bird spots beats anything on them; then confidence."""
     best = None
     for i, frame in enumerate(frames):
-        for det in detector.birds(frame):
+        for det in detect(frame, detector, region):
             box = (det.x1, det.y1, det.x2, det.y2)
             on_spot = any(iou(box, spot) >= SPOT_IOU for spot in spots)
             if best is None or (not on_spot, det.conf) > (not best[2], best[1].conf):
@@ -130,12 +178,36 @@ def preview(frame: np.ndarray, det: Detection) -> np.ndarray:
 
 class Pipeline:
     def __init__(self, store: Path, data_dir: Path, detector: Detector, classifier: Classifier,
-                 camera: str = "tray", source: str = "live"):  # fmt: skip
+                 camera: str = "tray", source: str = "live",
+                 region: Region | None = None):  # fmt: skip
         self.store, self.data_dir = store, data_dir
         self.detector, self.classifier, self.camera = detector, classifier, camera
         self.source = source  # 'test' for post-test: never trained on, never summarized
         self.rng = random.Random()  # picks the spot checks
+        self.region = region
+        self._region_stale_logged = False
         db.init(store)
+
+    def current_region(self, now: dt.datetime | None = None) -> Region | None:
+        """The detector region, unless the camera has moved since it was set."""
+        if self.region is None:
+            return None
+        moved = last_move(self.store, self.camera, now or dt.datetime.now())
+        if moved and moved > self.region.set_at:
+            if not self._region_stale_logged:
+                log.warning("detector region %s was set before the camera moved (%s); "
+                            "using the whole frame", self.region.text(), moved)  # fmt: skip
+                self._region_stale_logged = True
+            return None
+        return self.region
+
+    def region_text(self, now: dt.datetime | None = None) -> str:
+        """For status: what the detector looks at."""
+        if self.region is None:
+            return "whole frame"
+        if self.current_region(now) is None:
+            return f"whole frame (crop {self.region.text()} is from before the camera moved)"
+        return f"cropped to {self.region.text()}"
 
     def _save(self, rel: str, image: np.ndarray, quality: int = 92) -> None:
         path = self.data_dir / rel
@@ -146,7 +218,7 @@ class Pipeline:
         now = now or dt.datetime.now()
         stamp = now.strftime("%Y-%m-%d/%H%M%S")
         spots = not_bird_spots(self.store, self.camera, now)
-        found = best_detection(frames, self.detector, spots)
+        found = best_detection(frames, self.detector, spots, self.current_region(now))
         if found is None:
             # Keep one frame per empty burst for a week: detector misses show up here.
             self._save(f"rejects/{stamp}.jpg", frames[len(frames) // 2], quality=85)
