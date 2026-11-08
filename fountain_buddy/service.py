@@ -307,6 +307,7 @@ class Service:
         db.init(self.cfg.db_path)
         loop = asyncio.get_running_loop()
         self.pipeline = await loop.run_in_executor(self.worker, load_pipeline, self.cfg)
+        await loop.run_in_executor(self.worker, self.pipeline.prune_rejects)
         bot_task = asyncio.create_task(self.bot.start(self.cfg.discord_token), name="discord")
         await asyncio.wait_for(self.bot.ready.wait(), 60)
         try:

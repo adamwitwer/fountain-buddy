@@ -72,7 +72,9 @@ def test_pipeline_keeps_a_reject_frame_when_no_bird(tmp_path):
     pipe = Pipeline(tmp_path / "fb.db", tmp_path, FakeDetector([[], []]), FakeClassifier())
     assert pipe.process(_frames(2), now=dt.datetime(2026, 10, 19, 8, 0, 0)) is None
     assert (tmp_path / "rejects" / "2026-10-19" / "080000.jpg").exists()
-    pipe.prune_rejects(today=dt.date(2026, 10, 30))
+    pipe.prune_rejects(today=dt.date(2026, 10, 21))
+    assert (tmp_path / "rejects" / "2026-10-19").exists()  # two days back: kept
+    pipe.prune_rejects(today=dt.date(2026, 10, 22))
     assert not (tmp_path / "rejects" / "2026-10-19").exists()
 
 

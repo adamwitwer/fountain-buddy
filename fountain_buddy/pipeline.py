@@ -54,7 +54,7 @@ from fountain_buddy.detect import Detection, Detector, iou
 log = logging.getLogger(__name__)
 
 PREVIEW_WIDTH = 1600
-REJECTS_KEPT_DAYS = 7
+REJECTS_KEPT_DAYS = 2  # today plus the two days before; ~5 GB a day at 4K
 SPOT_IOU = 0.5  # the bracket repeats at ~0.95, the ivy sprig at 0.5-0.9
 SPOT_DAYS = 30
 POSTABLE = {*species.SPECIES, species.SQUIRREL}
