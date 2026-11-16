@@ -32,6 +32,8 @@ SECRET_PATTERNS = {
 PUBLIC_ENV_KEYS = {
     "CAMERA_HOST",
     "CAMERA_USERNAME",
+    "CAMERA2_HOST",  # the spare camera's LAN address; its password stays checked
+    "CAMERA2_USERNAME",
     "FB_DATA_DIR",
     "DISCORD_CHANNEL_ID",
     "FB_PUBLISH_DEST",

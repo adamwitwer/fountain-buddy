@@ -341,6 +341,27 @@ Learned from v1 and the 2026-10-18 probe:
   their detections plus a margin. Replay that period's frames with and without it, and
   set it only if it misses nothing the whole frame found. Then use the same box for the
   public page's big photos.
+- **Trial: Reolink Lumus Pro at 192.168.50.47** (2026-11-14, one day; Adam: the RLC-810WA
+  "wasn't fit for purpose", and it had been unreachable since before 12:00 that day).
+  Named "Bird Baths", firmware v3.2.0.4243, 4K, push events on port 9000 like the old one,
+  motion sensitivity already at max (50). Switched by swapping the `CAMERA_*` and
+  `CAMERA2_*` blocks in `.env` (the old camera's settings are now `CAMERA2_*`; the
+  pre-trial file is `data/.env.before-lumus-trial`), recorded with `camera-moved` at
+  12:16:09, live 12:16:17. View: close and nearly top-down onto the tray, which fills the
+  middle third of the frame (~1,300 px wide at 4K), with leaves, ivy and the deck around
+  it. Overlay reads "Bird Baths" bottom right. **Day/night is set to `Color`, not Auto**,
+  with the spotlight off, so night frames may not be greyscale and the infrared rule may
+  not fire. Watch the overnight post count. To revert: swap the blocks back, run
+  `camera-moved`, then restart.
+- **Lumus Pro moved 2026-11-16 ~15:38-15:57** (offline while moving; recorded with
+  `camera-moved` at 15:57). Now on the fence looking along it: the tray is small, left of
+  center (~300 px wide at 4K), with the holly and grill at left and fence boards filling
+  the right half. First bird a cardinal at 16:00. Sharpness on both Lumus views: up close
+  (11-15 noon) the seed is fairly crisp but a dove's body is soft, so the bird sat in
+  front of the fixed focus. Far (11-16 16:00, near dusk) a ~150 px cardinal and even the
+  still fence boards have a smeared, painterly look: small-sensor noise reduction in low
+  light, plus motion blur. Adam: "I can't seem to get sharp images with these Reolink
+  cameras"; shopping for a different camera (see the agent log, 2026-11-16).
 - Frames carry burned-in overlays: date/time top center, a Reolink watermark top left,
   "Tray Feeder" bottom right. The view is fisheye-ish.
 
@@ -369,6 +390,7 @@ is one of: open / adopted / declined / done.
 
 | Date | Input | Status |
 |------|-------|--------|
+| 2026-11-16 | Camera requirements, asked by Adam. Networking: local LAN access with no cloud needed, RTSP (required), ONVIF motion events or an HTTP full-res snapshot (nice), wired PoE preferred over Wi-Fi, fixed address. A non-Reolink camera needs a second backend in `camera.py` (RTSP frames, plus ONVIF events or our own motion detection on the sub-stream), so the reolink_aio dependency stops being a constraint. For sharpness, the specs that matter are optical zoom or varifocal (so the camera can sit back where focus is easy and still fill the frame), sensor size (1/1.8" or larger) and shutter control, not 4K. Both Lumus views were soft for different reasons (see the camera section). Adam: power at the fence yes, PoE cable run no for now (maybe later). So: Wi-Fi. Options: a PoE camera behind a PoE injector and a Wi-Fi client bridge at the fence (no cable run to the house), a Wi-Fi camera with optical zoom, or the Pi 5 with the HQ Camera. Shortlist for the bridge option: EmpireTech (Dahua OEM) IPC-T54IR-ZE-S3 turret (1/1.8", 4MP, 2.7-12 mm motorized, IR) for 2-3 m from the tray, or IPC-B54IR-Z4E-S3 bullet (8-32 mm) for 4-6 m. Avoid WizColor/TiOC models (white light at night breaks the infrared rule) and Hikvision 2646G2 (1/3"). Bridge: a GL.iNet travel router in Extender/WDS mode, not Repeater (NAT). Power the camera from 12 V DC if the model takes it, so no injector. | open |
 | 2026-11-07 | Crop the detector to the feeders. YOLO sees the 4K frame at a third of its size, and the patio, house and grill can only cause false alarms. The face-the-fence view puts both feeders in about a third of the width, so a crop gives birds ~2.5-3x the pixels. Built switched off, as a `region` in detector.json tied to the view (a later camera move turns it off), so a box from an old view can't hide birds. Box to come from real detections and a replay, not a guess (Adam agreed). | open |
 | 2026-10-29 | Adam: too many repetitive or obviously right posts; raise the cooldown and auto-approve above ~96%. Agreed, with changes: hold back a repeat of the *same guess* within 5 min rather than every post (several species share the tray), and auto-accept at 0.97 without making it a label. Training on its own guesses would teach the model its mistakes, and the head learns little from crops it already gets right. Spot-check 1 in 10 so accuracy at the top stays measured as retrains shift calibration. Adam chose 5 min, 0.97, publish auto-accepts, spot checks. | done |
 | 2026-10-22 | Public page at adamwitwer.com/birds/, built here and pushed over SSH (like Watchlog from the Pi). Publish only human-answered species so nothing unchecked goes public; group bursts into visits (one titmouse made 22 posts in an hour); show the full frame, since crops are out of focus; show the AI's guess beside the answer, since the misses are the fun part. Keep 10 days plus each visitor's best (Adam). Later: let Adam pick a visitor's best photo in Discord; detector confidence sometimes picks a well-camouflaged dove. | done |
